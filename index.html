@@ -234,6 +234,37 @@ select { font-size: 16px; }
 .coordinate.file { right: 4px; bottom: 2px; }
 .coordinate.rank { left: 4px; top: 2px; }
 
+.control-badge {
+  position: absolute;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  font-size: clamp(.52rem, 1.35vw, .7rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: #f8fafc;
+  border: 1.5px solid rgba(8, 17, 31, .6);
+  pointer-events: none;
+}
+
+.control-badge.mine {
+  top: 3px;
+  right: 3px;
+  border-radius: 50%;
+  background: hsl(215 70% 40%);
+}
+
+.control-badge.theirs {
+  bottom: 3px;
+  left: 3px;
+  border-radius: 4px;
+  background: hsl(347 65% 40%);
+}
+
 .side-panel {
   display: grid;
   gap: 14px;
@@ -300,6 +331,21 @@ select {
 .legend-swatch.red { background: hsl(347 62% 64%); }
 .legend-swatch.purple { background: hsl(278 52% 63%); }
 .legend-swatch.clear { background: linear-gradient(135deg, #d9e2ec 50%, #73839a 50%); }
+
+.legend-badge {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  font-size: .68rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #f8fafc;
+  border: 1px solid rgba(255,255,255,.25);
+}
+.legend-badge.mine { border-radius: 50%; background: hsl(215 70% 40%); }
+.legend-badge.theirs { border-radius: 4px; background: hsl(347 65% 40%); }
 
 .square-details {
   min-height: 72px;
@@ -422,6 +468,7 @@ select {
   .side-panel { grid-template-columns: 1fr; }
   .board-wrap { border-radius: 11px; }
   .piece { font-size: clamp(2rem, 12.2vw, 4.4rem); }
+  .control-badge { min-width: 13px; height: 13px; padding: 0 2px; border-width: 1px; }
   .status-row { align-items: flex-start; flex-wrap: wrap; }
   .legend { grid-template-columns: 1fr 1fr; }
   .card { padding: 14px; }
@@ -460,6 +507,7 @@ select {
   .control-group { gap: 3px; margin-bottom: 7px; }
   select, .primary-button, .secondary-button { min-height: 38px; padding: 7px 9px; }
   .legend { gap: 5px; }
+  .control-badge { min-width: 12px; height: 12px; padding: 0 2px; border-width: 1px; }
   .square-details { min-height: 50px; }
 }
 
@@ -1176,7 +1224,10 @@ app.innerHTML = `
             <div class="legend-item"><span class="legend-swatch red"></span>Opponent control</div>
             <div class="legend-item"><span class="legend-swatch purple"></span>Contested</div>
             <div class="legend-item"><span class="legend-swatch clear"></span>Uncontrolled</div>
+            <div class="legend-item"><span class="legend-badge mine">2</span>Your attacker count</div>
+            <div class="legend-item"><span class="legend-badge theirs">1</span>Opponent attacker count</div>
           </div>
+          <p class="tip">Badges back up the color so the map doesn't rely on hue alone: a round badge (top-right of a square) is your coverage count, a square badge (bottom-left) is your opponent's — both appear together on contested squares.</p>
         </section>
 
         <section class="card">
@@ -1301,14 +1352,20 @@ function generateAttackMap() {
   return map;
 }
 
-function overlayColor(square, attackMap) {
+function isControlMapVisible() {
   const mapMode = mapModeEl.value;
-  const visible = mapMode === 'always' || (mapMode === 'hold' && holdRevealActive);
-  if (!visible) return 'transparent';
+  return mapMode === 'always' || (mapMode === 'hold' && holdRevealActive);
+}
 
+function controlCounts(square, attackMap) {
   const attackers = attackMap[square];
-  const mine = attackers.filter(a => a.color === playerColor).length;
-  const theirs = attackers.filter(a => a.color === computerColor).length;
+  return {
+    mine: attackers.filter(a => a.color === playerColor).length,
+    theirs: attackers.filter(a => a.color === computerColor).length,
+  };
+}
+
+function overlayColor({ mine, theirs }) {
   if (!mine && !theirs) return 'transparent';
 
   // Use fully opaque HSL colors instead of transparent overlays. This makes a
@@ -1345,6 +1402,7 @@ function orientationSquares() {
 
 function renderBoard(focusOverride) {
   const attackMap = generateAttackMap();
+  const controlVisible = isControlMapVisible();
   const { squares } = orientationSquares();
   const legalByTarget = new Map(legalTargets.map(move => [move.to, move]));
 
@@ -1370,10 +1428,28 @@ function renderBoard(focusOverride) {
     if (selectedSquare === square) squareEl.classList.add('selected');
     if (lastMove && (lastMove.from === square || lastMove.to === square)) squareEl.classList.add('last-move');
 
+    const counts = controlCounts(square, attackMap);
     const overlay = document.createElement('span');
     overlay.className = 'control-overlay';
-    overlay.style.backgroundColor = overlayColor(square, attackMap);
+    overlay.style.backgroundColor = controlVisible ? overlayColor(counts) : 'transparent';
     squareEl.appendChild(overlay);
+
+    if (controlVisible) {
+      if (counts.mine) {
+        const badge = document.createElement('span');
+        badge.className = 'control-badge mine';
+        badge.textContent = String(counts.mine);
+        badge.setAttribute('aria-hidden', 'true');
+        squareEl.appendChild(badge);
+      }
+      if (counts.theirs) {
+        const badge = document.createElement('span');
+        badge.className = 'control-badge theirs';
+        badge.textContent = String(counts.theirs);
+        badge.setAttribute('aria-hidden', 'true');
+        squareEl.appendChild(badge);
+      }
+    }
 
     if (piece) {
       const pieceEl = document.createElement('span');
@@ -1435,9 +1511,7 @@ function focusSquare(square) {
 
 function describeSquare(square, attackMap) {
   const piece = game.get(square);
-  const attackers = attackMap[square];
-  const mine = attackers.filter(a => a.color === playerColor).length;
-  const theirs = attackers.filter(a => a.color === computerColor).length;
+  const { mine, theirs } = controlCounts(square, attackMap);
   const occupant = piece ? `${colorName(piece.color)} ${PIECE_NAMES[piece.type]}` : 'empty';
   return `${square}, ${occupant}, your coverage ${mine}, opponent coverage ${theirs}`;
 }
