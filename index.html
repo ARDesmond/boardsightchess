@@ -1351,6 +1351,9 @@ function renderBoard(focusOverride) {
   const activeSquare = document.activeElement?.dataset?.square;
   if (activeSquare) focusedSquare = activeSquare;
 
+  const targetSquare = focusOverride ?? (activeSquare ? focusedSquare : null);
+  const rovingSquare = targetSquare ?? focusedSquare ?? squares[0];
+
   boardEl.innerHTML = '';
   for (const square of squares) {
     const { x, y } = squareToCoords(square);
@@ -1362,6 +1365,7 @@ function renderBoard(focusOverride) {
     squareEl.dataset.square = square;
     squareEl.setAttribute('role', 'gridcell');
     squareEl.setAttribute('aria-label', describeSquare(square, attackMap));
+    squareEl.tabIndex = square === rovingSquare ? 0 : -1;
 
     if (selectedSquare === square) squareEl.classList.add('selected');
     if (lastMove && (lastMove.from === square || lastMove.to === square)) squareEl.classList.add('last-move');
@@ -1415,8 +1419,18 @@ function renderBoard(focusOverride) {
   if (hoveredSquare) renderSquareDetails(hoveredSquare, attackMap);
   renderStatus();
 
-  const targetSquare = focusOverride ?? (activeSquare ? focusedSquare : null);
-  if (targetSquare) boardEl.querySelector(`[data-square="${targetSquare}"]`)?.focus({ preventScroll: true });
+  if (targetSquare) {
+    focusedSquare = targetSquare;
+    boardEl.querySelector(`[data-square="${targetSquare}"]`)?.focus({ preventScroll: true });
+  }
+}
+
+function focusSquare(square) {
+  const el = boardEl.querySelector(`[data-square="${square}"]`);
+  if (!el) return;
+  for (const btn of boardEl.querySelectorAll('.square')) btn.tabIndex = -1;
+  el.tabIndex = 0;
+  el.focus({ preventScroll: true });
 }
 
 function describeSquare(square, attackMap) {
@@ -1508,7 +1522,7 @@ function resolvePromotion(type) {
   promotionModalEl.classList.add('hidden');
   if (!pending) return;
   makePlayerMove(pending.from, pending.to, type);
-  boardEl.querySelector(`[data-square="${pending.to}"]`)?.focus();
+  focusSquare(pending.to);
 }
 
 function cancelPromotion() {
@@ -1650,6 +1664,25 @@ document.querySelector('#ad-continue').addEventListener('click', closeAdAndStart
 document.querySelector('#promotion-close').addEventListener('click', cancelPromotion);
 mapModeEl.addEventListener('change', () => renderBoard());
 
+const BOARD_ARROW_DELTAS = {
+  ArrowUp: { dx: 0, dy: -1 },
+  ArrowDown: { dx: 0, dy: 1 },
+  ArrowLeft: { dx: -1, dy: 0 },
+  ArrowRight: { dx: 1, dy: 0 },
+};
+
+function moveBoardFocus(key) {
+  const current = document.activeElement?.dataset?.square;
+  if (!current) return;
+  const { squares } = orientationSquares();
+  const index = squares.indexOf(current);
+  if (index === -1) return;
+  const { dx, dy } = BOARD_ARROW_DELTAS[key];
+  const row = Math.min(7, Math.max(0, Math.floor(index / 8) + dy));
+  const col = Math.min(7, Math.max(0, (index % 8) + dx));
+  focusSquare(squares[row * 8 + col]);
+}
+
 window.addEventListener('keydown', event => {
   if (event.code === 'Space' && mapModeEl.value === 'hold' && !event.repeat) {
     event.preventDefault();
@@ -1658,6 +1691,11 @@ window.addEventListener('keydown', event => {
   }
   if (event.key === 'Escape' && !adModalEl.classList.contains('hidden')) closeAdAndStart();
   if (event.key === 'Escape' && promotionPending) cancelPromotion();
+
+  if (BOARD_ARROW_DELTAS[event.key] && boardEl.contains(document.activeElement)) {
+    event.preventDefault();
+    moveBoardFocus(event.key);
+  }
 });
 window.addEventListener('keyup', event => {
   if (event.code === 'Space' && mapModeEl.value === 'hold') {
