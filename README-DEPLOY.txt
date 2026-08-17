@@ -38,8 +38,16 @@ ONE-TIME SETUP
 
 UPLOADING / UPDATING THE SITE
 
+  Run ./deploy.sh from the repo root with your CloudFront distribution ID:
+
+    BOARDSIGHT_DISTRIBUTION_ID=YOUR_DISTRIBUTION_ID ./deploy.sh
+
+  It wraps the following steps (set BOARDSIGHT_BUCKET too if the bucket name
+  isn't boardsightchess.com):
+
   aws s3 sync . s3://boardsightchess.com \
     --exclude ".git/*" --exclude "README-DEPLOY.txt" --exclude "CLAUDE.md" \
+    --exclude "prompts/*" --exclude "deploy.sh" \
     --delete
 
   aws s3 cp site.webmanifest s3://boardsightchess.com/site.webmanifest \
