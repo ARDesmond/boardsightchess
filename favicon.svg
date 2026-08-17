@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="12" fill="#08111f"/>
+  <g>
+    <rect x="8" y="8" width="24" height="24" fill="#4f86c6"/>
+    <rect x="32" y="8" width="24" height="24" fill="#a766b8"/>
+    <rect x="8" y="32" width="24" height="24" fill="#d65d78"/>
+    <rect x="32" y="32" width="24" height="24" fill="#4f86c6"/>
+  </g>
+  <text x="32" y="43" text-anchor="middle" font-size="31" font-family="Georgia,serif" fill="white">♞</text>
+</svg>
