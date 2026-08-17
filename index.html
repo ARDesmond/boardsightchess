@@ -655,6 +655,15 @@ class Chess {
     return move ? { ...move } : null;
   }
 
+  withMove(move, fn) {
+    const record = this._makeMove(move, false);
+    try {
+      return fn();
+    } finally {
+      this._restoreRecord(record);
+    }
+  }
+
   inCheck() {
     return this._isKingAttacked(this.turnColor);
   }
@@ -1020,9 +1029,8 @@ function minimax(chess, depth, alpha, beta, maximizingWhite) {
   if (maximizingWhite) {
     let best = -Infinity;
     for (const move of moves) {
-      const next = new Chess(chess.fen());
-      next.move({ ...move, skipSan: true });
-      best = Math.max(best, minimax(next, depth - 1, alpha, beta, false));
+      const score = chess.withMove(move, () => minimax(chess, depth - 1, alpha, beta, false));
+      best = Math.max(best, score);
       alpha = Math.max(alpha, best);
       if (beta <= alpha) break;
     }
@@ -1031,9 +1039,8 @@ function minimax(chess, depth, alpha, beta, maximizingWhite) {
 
   let best = Infinity;
   for (const move of moves) {
-    const next = new Chess(chess.fen());
-    next.move({ ...move, skipSan: true });
-    best = Math.min(best, minimax(next, depth - 1, alpha, beta, true));
+    const score = chess.withMove(move, () => minimax(chess, depth - 1, alpha, beta, true));
+    best = Math.min(best, score);
     beta = Math.min(beta, best);
     if (beta <= alpha) break;
   }
@@ -1052,9 +1059,8 @@ function chooseComputerMove(game, computerColor, depth = 2) {
   let bestMoves = [];
 
   for (const move of moves) {
-    const next = new Chess(game.fen());
-    next.move({ ...move, skipSan: true });
-    const score = minimax(next, Math.max(0, depth - 1), -Infinity, Infinity, next.turn() === 'w');
+    const score = game.withMove(move, () =>
+      minimax(game, Math.max(0, depth - 1), -Infinity, Infinity, game.turn() === 'w'));
     const isBetter = computerColor === 'w' ? score > bestScore : score < bestScore;
 
     if (isBetter) {
@@ -1106,6 +1112,7 @@ let isComputerThinking = false;
 let pendingNewGame = false;
 let holdRevealActive = false;
 let hoveredSquare = null;
+let focusedSquare = null;
 
 const app = document.querySelector('#app');
 app.innerHTML = `
@@ -1336,10 +1343,13 @@ function orientationSquares() {
   return { squares, files, ranks };
 }
 
-function renderBoard() {
+function renderBoard(focusOverride) {
   const attackMap = generateAttackMap();
   const { squares } = orientationSquares();
   const legalByTarget = new Map(legalTargets.map(move => [move.to, move]));
+
+  const activeSquare = document.activeElement?.dataset?.square;
+  if (activeSquare) focusedSquare = activeSquare;
 
   boardEl.innerHTML = '';
   for (const square of squares) {
@@ -1395,12 +1405,18 @@ function renderBoard() {
       hoveredSquare = square;
       renderSquareDetails(square, attackMap);
     });
-    squareEl.addEventListener('focus', () => renderSquareDetails(square, attackMap));
+    squareEl.addEventListener('focus', () => {
+      focusedSquare = square;
+      renderSquareDetails(square, attackMap);
+    });
     boardEl.appendChild(squareEl);
   }
 
   if (hoveredSquare) renderSquareDetails(hoveredSquare, attackMap);
   renderStatus();
+
+  const targetSquare = focusOverride ?? (activeSquare ? focusedSquare : null);
+  if (targetSquare) boardEl.querySelector(`[data-square="${targetSquare}"]`)?.focus({ preventScroll: true });
 }
 
 function describeSquare(square, attackMap) {
@@ -1498,7 +1514,7 @@ function resolvePromotion(type) {
 function cancelPromotion() {
   promotionModalEl.classList.add('hidden');
   promotionPending = null;
-  renderBoard();
+  renderBoard(selectedSquare);
 }
 
 function renderStatus() {
@@ -1632,7 +1648,7 @@ document.querySelector('#undo').addEventListener('click', takeBack);
 document.querySelector('#ad-close').addEventListener('click', closeAdAndStart);
 document.querySelector('#ad-continue').addEventListener('click', closeAdAndStart);
 document.querySelector('#promotion-close').addEventListener('click', cancelPromotion);
-mapModeEl.addEventListener('change', renderBoard);
+mapModeEl.addEventListener('change', () => renderBoard());
 
 window.addEventListener('keydown', event => {
   if (event.code === 'Space' && mapModeEl.value === 'hold' && !event.repeat) {

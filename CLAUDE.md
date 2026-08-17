@@ -58,9 +58,15 @@ array (`this.board[y][x]`, `y=0` is rank 1) of `{ color, type }` or `null`. Key 
 Minimax with alpha-beta pruning over a hand-rolled material + center-distance + pawn-advancement
 evaluation (`evaluatePosition`). `depth` comes from the UI's difficulty select (1/2/3). At `depth === 1`
 there's a 42% chance of picking a uniformly random legal move instead of searching, so "Beginner" plays
-intentionally weakly rather than just searching shallow. Each recursive step clones the position via
-`new Chess(chess.fen())` rather than mutating in place — simple but means search cost scales with FEN
-serialization, worth knowing before raising default search depth.
+intentionally weakly rather than just searching shallow. Each recursive step mutates a single shared
+`Chess` instance in place via `withMove(move, fn)` — a public wrapper around the engine's own
+`_makeMove(move, false)` / `_restoreRecord` make/unmake primitive (the same pattern `_legalMoves()` uses
+internally, hardened with try/finally so state is always restored even if `fn` throws) — instead of
+cloning the position with `new Chess(chess.fen())` per node. This also removes a redundant legal-move
+re-scan that `.move()` used to perform to re-resolve each already-known move on a fresh clone. One
+nuance: since `_makeMove(..., false)` never touches `positionCounts`, threefold-repetition checks during
+search read the root game's real, frozen repetition history rather than a fresh per-branch counter —
+verified behaviorally equivalent at these shallow (1-3 ply) search depths.
 
 ### UI / game controller (rest of the script)
 
