@@ -3,15 +3,21 @@
 # See README-DEPLOY.txt for one-time AWS setup.
 set -euo pipefail
 
+cd "$(dirname "$0")"
+
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
+
 BUCKET="${BOARDSIGHT_BUCKET:-boardsightchess.com}"
 DISTRIBUTION_ID="${BOARDSIGHT_DISTRIBUTION_ID:-}"
 
 if [[ -z "$DISTRIBUTION_ID" ]]; then
-  echo "Error: set BOARDSIGHT_DISTRIBUTION_ID to your CloudFront distribution ID." >&2
+  echo "Error: set BOARDSIGHT_DISTRIBUTION_ID in .env (copy .env.example) or the environment." >&2
   exit 1
 fi
-
-cd "$(dirname "$0")"
 
 aws s3 sync . "s3://$BUCKET" \
   --exclude ".git/*" \
@@ -19,6 +25,7 @@ aws s3 sync . "s3://$BUCKET" \
   --exclude "CLAUDE.md" \
   --exclude "prompts/*" \
   --exclude "deploy.sh" \
+  --exclude ".env*" \
   --delete
 
 aws s3 cp site.webmanifest "s3://$BUCKET/site.webmanifest" \

@@ -38,16 +38,26 @@ ONE-TIME SETUP
 
 UPLOADING / UPDATING THE SITE
 
-  Run ./deploy.sh from the repo root with your CloudFront distribution ID:
+  First-time setup: copy the example env file and fill in your CloudFront
+  distribution ID (and bucket name, if it isn't boardsightchess.com):
 
-    BOARDSIGHT_DISTRIBUTION_ID=YOUR_DISTRIBUTION_ID ./deploy.sh
+    cp .env.example .env
+    $EDITOR .env
 
-  It wraps the following steps (set BOARDSIGHT_BUCKET too if the bucket name
-  isn't boardsightchess.com):
+  Then just run:
+
+    ./deploy.sh
+
+  .env is gitignored, so it stays local. deploy.sh also accepts the same
+  variables set inline instead, e.g.
+  BOARDSIGHT_DISTRIBUTION_ID=YOUR_DISTRIBUTION_ID ./deploy.sh — but a
+  present .env takes priority.
+
+  It wraps the following steps:
 
   aws s3 sync . s3://boardsightchess.com \
     --exclude ".git/*" --exclude "README-DEPLOY.txt" --exclude "CLAUDE.md" \
-    --exclude "prompts/*" --exclude "deploy.sh" \
+    --exclude "prompts/*" --exclude "deploy.sh" --exclude ".env*" \
     --delete
 
   aws s3 cp site.webmanifest s3://boardsightchess.com/site.webmanifest \
