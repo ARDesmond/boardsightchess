@@ -1,82 +1,32 @@
-BOARDSIGHT CHESS — AWS DEPLOYMENT (S3 + CLOUDFRONT + ROUTE 53)
+BOARDSIGHT CHESS 2.0 — RUN AND DEPLOY
 
-Domain: boardsightchess.com (registered/hosted in Route 53)
-Architecture: Route 53 -> CloudFront (HTTPS via ACM) -> S3 (private origin)
+LOCAL PREVIEW
+1. Install a current Node.js runtime if needed.
+2. Open a terminal in this folder.
+3. Run: node serve.cjs
+4. Open http://127.0.0.1:8001
+No npm install, build step, API key, account, or backend is required.
+Do not open index.html with file://: browser Workers/WASM require HTTP(S).
+Any static HTTP server that serves .wasm as application/wasm also works.
 
-ONE-TIME SETUP
+CHECKS
+node tests.cjs
+node engine-tests.cjs
+The second command runs the real bundled WASM engine at all eleven levels.
 
-1. Create the S3 bucket
-   - Bucket name: boardsightchess.com (or similar).
-   - Block all public access: ON. The bucket stays private; CloudFront reads
-     it through an Origin Access Control, not a public bucket policy.
+CLOUDFLARE PAGES
+Upload the contents of the clean Boardsight-2.0 handoff folder using the
+existing Pages direct-upload workflow. index.html must be at the site root.
+Include styles.css, app.js, chess.js, openings.js, engine.js, vendor/stockfish,
+favicon.svg, site.webmanifest, robots.txt, and _headers.
+Keep the Stockfish license and matching source archive available.
+serve.cjs and the test/report files are for local development; they do not
+need to execute on the host. No Pages Functions or backend is required.
+No cross-origin isolation headers are required for this single-thread build.
 
-2. Request an ACM certificate
-   - Must be requested in the us-east-1 region for CloudFront to use it.
-   - Certificate Manager > Request certificate > boardsightchess.com and
-     www.boardsightchess.com.
-   - Validate via DNS — ACM can write the validation CNAME directly into
-     Route 53.
+The optional GA4 hooks remain inactive unless explicitly configured.
+The app contains no advertising popup, placeholder, creative or ad timer.
+Visual assets live in assets/pieces and favicon.svg. Include them when
+uploading the site. No new runtime dependency was added by the reskin.
 
-3. Create a CloudFront distribution
-   - Origin: the S3 bucket, using Origin Access Control (OAC) so the bucket
-     stays private.
-   - Alternate domain names (CNAMEs): boardsightchess.com and
-     www.boardsightchess.com.
-   - Custom SSL certificate: the ACM cert from step 2.
-   - Default root object: index.html.
-   - Viewer protocol policy: Redirect HTTP to HTTPS.
-   - Response headers policy: create a custom policy that sets
-       X-Content-Type-Options: nosniff
-       Referrer-Policy: strict-origin-when-cross-origin
-       Permissions-Policy: camera=(), microphone=(), geolocation=()
-     and attach it to the default cache behavior.
-
-4. Point the domain at CloudFront in Route 53
-   - In the boardsightchess.com hosted zone, create Alias A and AAAA records
-     for both boardsightchess.com and www.boardsightchess.com targeting the
-     CloudFront distribution.
-
-UPLOADING / UPDATING THE SITE
-
-  First-time setup: copy the example env file and fill in your CloudFront
-  distribution ID (and bucket name, if it isn't boardsightchess.com):
-
-    cp .env.example .env
-    $EDITOR .env
-
-  Then just run:
-
-    ./deploy.sh
-
-  .env is gitignored, so it stays local. deploy.sh also accepts the same
-  variables set inline instead, e.g.
-  BOARDSIGHT_DISTRIBUTION_ID=YOUR_DISTRIBUTION_ID ./deploy.sh — but a
-  present .env takes priority.
-
-  It wraps the following steps:
-
-  aws s3 sync . s3://boardsightchess.com \
-    --exclude ".git/*" --exclude "README-DEPLOY.txt" --exclude "CLAUDE.md" \
-    --exclude "prompts/*" --exclude "deploy.sh" --exclude ".env*" \
-    --delete
-
-  aws s3 cp site.webmanifest s3://boardsightchess.com/site.webmanifest \
-    --content-type "application/manifest+json"
-
-  aws cloudfront create-invalidation \
-    --distribution-id YOUR_DISTRIBUTION_ID --paths "/*"
-
-  site.webmanifest needs its content type set explicitly — the AWS CLI's
-  default MIME lookup does not recognize the .webmanifest extension and will
-  otherwise upload it as application/octet-stream, which breaks PWA install.
-
-  The cache invalidation step is what makes edits go live immediately instead
-  of waiting out CloudFront's cache TTL.
-
-NOTES
-- The Cloudflare Pages deployment described in earlier versions of this file
-  no longer applies; hosting moved to S3 + CloudFront as described above.
-- The interface has layouts for desktop, tablet portrait, mobile portrait, and
-  short landscape phone screens.
-- The code includes optional GA4 event hooks for game starts, ad opportunities,
-  ad closes, and take-backs. Those hooks do nothing unless a GA4 tag is added.
+All work is local. No GitHub login, push, merge, or remote update was made.
