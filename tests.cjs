@@ -1,6 +1,13 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
-const ctx=vm.createContext({console});vm.runInContext(fs.readFileSync('chess.js','utf8')+fs.readFileSync('openings.js','utf8')+fs.readFileSync('engine.js','utf8')+';globalThis.api={Chess,OPENINGS,repertoireMoves,selectCandidate};',ctx);
-const {Chess,OPENINGS,repertoireMoves,selectCandidate}=ctx.api;
+const ctx=vm.createContext({console});vm.runInContext(fs.readFileSync('chess.js','utf8')+fs.readFileSync('openings.js','utf8')+fs.readFileSync('engine.js','utf8')+';globalThis.api={Chess,OPENINGS,repertoireMoves,selectCandidate,openingContinuations};',ctx);
+const {Chess,OPENINGS,repertoireMoves,selectCandidate,openingContinuations}=ctx.api;
+assert.equal(openingContinuations([]).length,12);
+assert.equal(openingContinuations(['d2d4','d7d5','c2c4']).length,4);
+assert.equal(openingContinuations(['a2a3']).length,0);
+for(const line of openingContinuations([]))for(let i=0;i<=line.moves.length;i++)assert(openingContinuations(line.moves.slice(0,i)).some(candidate=>candidate.key===line.key));
+const captureHistory=new Chess();for(const move of ['e2e4','d7d5','e4d5'])captureHistory.move(move);
+assert.equal(captureHistory.history({verbose:true}).filter(move=>move.color==='w'&&move.captured).length,1);
+captureHistory.undo();assert.equal(captureHistory.history({verbose:true}).filter(move=>move.captured).length,0);
 function perft(g,d){if(!d)return 1;let n=0;for(const m of g.moves({verbose:true})){const r=g._makeMove(m,false);n+=perft(g,d-1);g._restoreRecord(r);}return n;}
 assert.equal(perft(new Chess(),3),8902);
 const castle=new Chess('r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1');castle.move('e1g1');assert.equal(castle.get('f1').type,'r');castle.undo();assert.equal(castle.get('h1').type,'r');

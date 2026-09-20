@@ -83,3 +83,11 @@ Additional visual QA: a temporary promotion-position fixture exercised the
 existing promotion chooser, knight underpromotion, resulting SVG piece and
 "Draw by insufficient material" game-end status. All passed. The temporary
 fixture was removed and is not included in the handoff.
+
+## Playing assistance update
+- Clicking a playable piece marks legal destinations; captures use rings. Sandbox retains free editing.
+- Captured-piece rows come from actual move history, follow board orientation, and update with undo/new game. Sandbox does not infer captures from missing pieces.
+- Optional evaluation uses a separate cancellable Stockfish worker, paused during opponent searches. Scores always use White's perspective. Disabled by default; unavailable for arbitrary Sandbox positions.
+- Optional opening guidance identifies matching move orders in the existing 12 distinct repertoire lines, offers compatible variations and a SAN/coordinate next move. It reports out-of-book and completed lines explicitly; it is not an exhaustive opening encyclopedia or transposition detector. Practice guidance stays within the configured practice lines.
+- Validation: rule/repertoire tests pass; all 11 real-WASM opponent levels pass; analysis perspective, cancellation and restart pass. Browser verified move markers, capture/undo/flip rows, evaluation alongside computer play, opening suggestions and phone/desktop presentation, with no console errors.
+- Evaluation layout: vertical bar directly left of the board, matching its height; White/Black ends follow board flips. Toggle and numeric score remain below. Verified 390px layout has a 5px gap and no horizontal overflow.

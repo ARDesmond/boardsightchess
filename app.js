@@ -18,6 +18,8 @@ const PIECES = {
 const PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
 
 const opponent = new StockfishOpponent();
+const analysis = new StockfishAnalysis();
+let evalEnabled=false,evalFen=null,evalTimer=null,evalVersion=0,guideEnabled=false,guideKey='';
 let mode = 'game', orientation = 'w', generation = 0, botTimer = null;
 let animationBusy = false, drag = null, suppressClick = false, inspected = null, releaseVisual = null;
 let hintVisible = false, trainingMessage = '', promotionPending = null;
@@ -52,9 +54,19 @@ app.innerHTML = `
           <div id="thinking" class="thinking hidden">Computer thinking…</div>
         </div>
         <div class="board-toolbar"><button id="sight-toggle" aria-pressed="true">Boardsight ON</button><button id="flip">Flip board</button><button id="inspect-toggle" aria-pressed="false">Inspect squares</button></div>
+        <div id="captures-top" class="capture-row"></div>
+        <div class="board-stage">
+          <div id="eval-panel" class="eval-rail hidden" aria-label="Position evaluation"><span id="eval-top-side">B</span><div class="eval-track" aria-hidden="true"><div id="eval-fill"></div></div><span id="eval-bottom-side">W</span></div>
         <div class="board-wrap">
           <div id="board" class="board" role="grid" aria-label="Chess board"></div>
         </div>
+        </div>
+        <div id="captures-bottom" class="capture-row"></div>
+        <section class="board-assistance" aria-label="Playing assistance">
+          <div class="assistance-toggles"><button id="eval-toggle" aria-pressed="false">Evaluation OFF</button><button id="guide-toggle" aria-pressed="false">Opening guidance OFF</button></div>
+          <div id="eval-details" class="hidden"><output id="eval-score" aria-live="polite">Not evaluated</output><p class="tip">Positive scores favor White; negative scores favor Black. Short Stockfish analysis.</p></div>
+          <div id="guide-panel" class="hidden"><p id="opening-name" aria-live="polite"></p><label for="guide-line">Line to pursue</label><select id="guide-line"></select><p id="guide-next" aria-live="polite"></p><p class="tip">Suggestions follow the selected repertoire line and depend on your opponent’s replies. Recognition uses known move orders.</p></div>
+        </section>
       </div>
 
       <aside class="side-panel">
@@ -285,6 +297,11 @@ function renderBoard() {
 
     if (destinations.includes(square)) squareEl.classList.add('opening-target');
     if (selectedSquare === square) squareEl.classList.add('selected');
+    const legalTarget=mode!=='sandbox'&&legalTargets.find(move=>move.to===square);
+    if(legalTarget){
+      const marker=document.createElement('span');marker.className='legal-marker'+(legalTarget.captured?' capture-marker':'');marker.setAttribute('aria-hidden','true');squareEl.appendChild(marker);
+      squareEl.setAttribute('aria-label',squareEl.getAttribute('aria-label')+(legalTarget.captured?', legal capture':', legal move'));
+    }
     if (lastMove && (lastMove.from === square || lastMove.to === square)) squareEl.classList.add('last-move');
 
     const overlay = document.createElement('span');
@@ -414,8 +431,10 @@ function scheduleComputerMove() {
   if(mode==='sandbox'||game.turn()!==computerColor||game.isGameOver()||isComputerThinking)return;
   const accepted=mode==='opening'?acceptedMoves():[];
   if(mode==='opening'&&!accepted.length){renderExtras();return;}
+  stopEvaluation();
   const token=generation, fen=game.fen(), started=performance.now(), delay=900+Math.random()*900;
   isComputerThinking=true;thinkingEl.classList.remove('hidden');document.querySelector('#retry-bot').classList.add('hidden');
+  if(evalEnabled){$('#eval-score').textContent='Waiting for computer move…';$('#eval-fill').style.height='50%';}
   const result=mode==='opening'?Promise.resolve(accepted[Math.floor(Math.random()*accepted.length)]):opponent.choose(fen,Number(difficultyEl.value),game.moves({verbose:true}).map(uci));
   result.then(move=>{
     if(token!==generation||fen!==game.fen())return;
@@ -500,12 +519,14 @@ const uci=move=>move.from+move.to+(move.promotion||'');
 function mapVisible(){return mapModeEl.value==='always'||(mapModeEl.value==='hold'&&holdRevealActive);}
 function acceptedMoves(){return repertoireMoves(OPENINGS.find(o=>o.id===$('#opening').value),$('#variation').value,game.history({verbose:true}).map(uci));}
 function invalidate(){
+  stopEvaluation();
   ++generation;clearTimeout(botTimer);opponent.cancel();isComputerThinking=false;animationBusy=false;
   thinkingEl.classList.add('hidden');$('#retry-bot').classList.add('hidden');
   cancelDrag();document.querySelectorAll('.motion-piece,.inspector-lines,.promotion-choice').forEach(el=>el.remove());
   promotionPending=null;releaseVisual=null;
 }
 function renderExtras(){
+  renderAssistance();
   $('#sight-toggle').textContent=mapVisible()?'Boardsight ON':'Boardsight OFF';
   $('#sight-toggle').setAttribute('aria-pressed',String(mapVisible()));
   $('#game-setup').classList.toggle('hidden',mode!=='game'||game.history().length>0);
@@ -669,4 +690,60 @@ window.addEventListener('keydown',event=>{
   if(event.key.toLowerCase()==='b'&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.repeat&&!/INPUT|SELECT|TEXTAREA|BUTTON/.test(event.target.tagName))$('#sight-toggle').click();
   if(event.key==='Escape'){cancelDrag();document.querySelector('.promotion-choice')?.remove();promotionPending=null;clearSelection();renderBoard();}
 });
+function stopEvaluation(){clearTimeout(evalTimer);analysis.cancel();evalFen=null;++evalVersion;}
+function renderAssistance(){
+  for(const [id,color] of [['captures-top',opposite(orientation)],['captures-bottom',orientation]]){
+    const row=$('#'+id);row.replaceChildren();
+    const label=document.createElement('span');label.textContent=colorName(color)+' captured: ';row.appendChild(label);
+    const captures=mode==='sandbox'?[]:game.history({verbose:true}).filter(move=>move.color===color&&move.captured);
+    for(const move of captures){const img=document.createElement('img');img.src='assets/pieces/'+opposite(color)+move.captured.toUpperCase()+'.svg';img.alt=colorName(opposite(color))+' '+PIECE_NAMES[move.captured];row.appendChild(img);}
+    if(!captures.length)row.appendChild(document.createTextNode(mode==='sandbox'?'Not tracked in Sandbox':'None'));
+  }
+  $('#guide-panel').classList.toggle('hidden',!guideEnabled);
+  if(guideEnabled){
+    const history=game.history({verbose:true}).map(uci);
+    let lines=mode==='sandbox'?[]:openingContinuations(history);
+    if(mode==='opening'){
+      const opening=OPENINGS.find(item=>item.id===$('#opening').value);
+      const practiceLines=$('#variation').value==='family'?opening.lines:[opening.lines[Number($('#variation').value)]];
+      lines=lines.filter(line=>practiceLines.some(practice=>practice.moves.join(' ')===line.key));
+    }
+    const select=$('#guide-line');select.replaceChildren();
+    for(const line of lines){const option=document.createElement('option');option.value=line.key;option.textContent=line.name;select.appendChild(option);}
+    if(lines.some(line=>line.key===guideKey))select.value=guideKey;
+    guideKey=select.value;select.disabled=!lines.length;
+    const line=lines.find(line=>line.key===guideKey);
+    const common=lines.length&&lines.every(item=>item.name.split(' — ')[0]===lines[0].name.split(' — ')[0]);
+    $('#opening-name').textContent=mode==='sandbox'?'Opening recognition is unavailable for edited positions.':!lines.length?'Out of book — no matching line in this repertoire.':!history.length?'Starting position — choose a line to explore.':common?'Opening: '+lines[0].name.split(' — ')[0]:'Several openings remain possible — choose a continuation.';
+    const next=line?.moves[history.length];
+    if(next){const preview=new Chess(game.fen());const move=preview.move(next);$('#guide-next').textContent=colorName(game.turn())+' next: '+move.san+' ('+next.slice(0,2)+' → '+next.slice(2,4)+')'+(game.turn()!==playerColor?' — opponent’s reply; your move follows.':'.');}
+    else $('#guide-next').textContent=line?'Selected repertoire line complete.':'No book suggestion for this position.';
+  }
+  $('#eval-panel').classList.toggle('hidden',!evalEnabled);
+  $('#eval-details').classList.toggle('hidden',!evalEnabled);
+  $('.board-stage').classList.toggle('has-evaluation',evalEnabled);
+  $('#eval-panel').classList.toggle('black-at-bottom',orientation==='b');
+  $('#eval-top-side').textContent=orientation==='w'?'B':'W';
+  $('#eval-bottom-side').textContent=orientation==='w'?'W':'B';
+  if(!evalEnabled)return;
+  if(mode==='sandbox'){stopEvaluation();$('#eval-score').textContent='Unavailable in Sandbox';return;}
+  if(game.isGameOver()){stopEvaluation();$('#eval-score').textContent=game.isCheckmate()?colorName(opposite(game.turn()))+' wins':'Draw';$('#eval-fill').style.height=game.isCheckmate()?(game.turn()==='b'?'100%':'0%'):'50%';return;}
+  if(isComputerThinking){$('#eval-score').textContent='Waiting for computer move…';return;}
+  const fen=game.fen();if(evalFen===fen)return;
+  stopEvaluation();evalFen=fen;const version=evalVersion;
+  $('#eval-score').textContent='Analyzing…';$('#eval-fill').style.height='50%';
+  evalTimer=setTimeout(async()=>{
+    if(isComputerThinking||version!==evalVersion)return;
+    try{const score=await analysis.analyze(fen);if(version!==evalVersion||game.fen()!==fen||!evalEnabled)return;
+      $('#eval-score').textContent=score.kind==='mate'?(score.value>=0?'White':'Black')+' mates in '+Math.abs(score.value):(score.value>=0?'+':'')+(score.value/100).toFixed(2);
+      const advantage=score.kind==='mate'?Math.sign(score.value)*10000:score.value;
+      $('#eval-fill').style.height=(50+49*Math.tanh(advantage/500))+'%';
+    }catch(error){if(version===evalVersion&&error.message!=='cancelled'){$('#eval-score').textContent='Analysis unavailable — toggle to retry';}}
+  },250);
+}
+$('#eval-toggle').onclick=()=>{evalEnabled=!evalEnabled;stopEvaluation();$('#eval-toggle').textContent='Evaluation '+(evalEnabled?'ON':'OFF');$('#eval-toggle').setAttribute('aria-pressed',String(evalEnabled));renderAssistance();};
+$('#guide-toggle').onclick=()=>{guideEnabled=!guideEnabled;$('#guide-toggle').textContent='Opening guidance '+(guideEnabled?'ON':'OFF');$('#guide-toggle').setAttribute('aria-pressed',String(guideEnabled));renderAssistance();};
+$('#guide-line').onchange=()=>{guideKey=$('#guide-line').value;renderAssistance();};
 startNewGame();
+
+

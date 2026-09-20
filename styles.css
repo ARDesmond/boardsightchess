@@ -175,6 +175,27 @@ textarea {resize:vertical;overflow-wrap:anywhere;font-family:ui-monospace,Consol
 }
 @media(prefers-reduced-motion:reduce) {*,*:before,*:after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important;}}
 
+.legal-marker {position:absolute;inset:36%;border-radius:50%;background:#53401d;border:2px solid #fff4d4;z-index:7;pointer-events:none;box-shadow:0 1px 4px #0008;}
+.legal-marker.capture-marker {inset:5%;background:transparent;border:4px solid #977015;box-shadow:inset 0 0 0 2px #fff4d4,0 0 0 1px #fff4d4;}
+.capture-row {display:flex;align-items:center;flex-wrap:wrap;gap:3px;min-height:36px;padding:4px 10px;color:var(--ink);font-size:.9rem;}
+.capture-row img {width:25px;height:29px;object-fit:contain;}
+.capture-row>span {margin-right:6px;font-weight:600;}
+.board-assistance {margin-top:12px;padding:14px;border:1px solid #b49b73;border-radius:12px;background:#fff8e9e6;}
+.assistance-toggles {display:flex;gap:10px;flex-wrap:wrap;}
+.assistance-toggles button {flex:1;min-width:140px;}
+.board-assistance select {width:100%;max-width:100%;margin-top:6px;}
+.board-stage {display:grid;grid-template-columns:minmax(0,1fr);max-width:780px;margin:0 auto;align-items:stretch;}
+.board-stage.has-evaluation {grid-template-columns:22px minmax(0,1fr);gap:8px;}
+.board-stage .board-wrap {max-width:none;}
+.eval-rail {display:flex;flex-direction:column;min-height:0;gap:4px;text-align:center;font-size:.7rem;font-weight:700;color:var(--text-primary);}
+.eval-track {position:relative;flex:1;min-height:0;background:#302b27;border:1px solid #91754d;border-radius:5px;overflow:hidden;}
+#eval-fill {position:absolute;bottom:0;left:0;width:100%;height:50%;background:#fff9e9;transition:height .3s ease;}
+.black-at-bottom #eval-fill {top:0;bottom:auto;}
+#eval-details {margin-top:12px;}
+#eval-score {font-weight:600;}
+@media(max-width:900px){.board-stage{max-width:680px;}}
+@media(max-width:480px){.board-stage.has-evaluation{grid-template-columns:16px minmax(0,1fr);gap:5px;}}
+@media(orientation:landscape) and (max-height:620px) and (min-width:680px){.board-stage{max-width:min(100%,calc(100dvh - 180px));}}
 /* Classic piece artwork is presentation only; canonical pieces and pointer targets are unchanged. */
 [data-art="wp"]{--piece-art:url('assets/pieces/wP.svg');}
 [data-art="wn"]{--piece-art:url('assets/pieces/wN.svg');}

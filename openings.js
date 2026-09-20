@@ -28,3 +28,13 @@ function repertoireMoves(opening, variation, history) {
   return [...new Set(lines.filter(line => history.every((move,i)=>line.moves[i]===move))
     .map(line=>line.moves[history.length]).filter(Boolean))];
 }
+
+// Exact move-order matches, deduplicated where family entries share lines.
+function openingContinuations(history) {
+  const seen=new Set(),result=[];
+  for(const opening of OPENINGS)for(const line of opening.lines){
+    const key=line.moves.join(' ');if(seen.has(key))continue;seen.add(key);
+    if(history.every((move,i)=>line.moves[i]===move))result.push({key,name:opening.name+' — '+line.name,moves:line.moves});
+  }
+  return result;
+}

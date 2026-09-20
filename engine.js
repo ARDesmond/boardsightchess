@@ -75,3 +75,27 @@ class StockfishOpponent {
     });
   }
 }
+
+// Analysis has its own cancellable worker; the UI pauses it during bot searches.
+class StockfishAnalysis extends StockfishOpponent {
+  analyze(fen) {
+    this.cancel();
+    return new Promise((resolve,reject)=>{
+      const worker=new Worker('vendor/stockfish/stockfish.js');this.worker=worker;
+      let score=null,finished=false;
+      const done=(error)=>{if(finished)return;finished=true;clearTimeout(timer);worker.terminate();this.worker=null;this.pending=null;error?reject(error):resolve(score);};
+      const timer=setTimeout(()=>done(new Error('Analysis timed out')),20000);
+      this.pending={reject:done};
+      worker.onerror=()=>done(new Error('Analysis unavailable'));
+      worker.onmessage=({data})=>{
+        const line=String(data);
+        if(line==='uciok'){worker.postMessage('setoption name Hash value 16');worker.postMessage('isready');}
+        if(line==='readyok'){worker.postMessage('position fen '+fen);worker.postMessage('go movetime 700');}
+        const match=line.match(/score (cp|mate) (-?\d+)/);
+        if(match&&!/bound/.test(line))score={kind:match[1],value:Number(match[2])*(fen.split(' ')[1]==='w'?1:-1)};
+        if(line.startsWith('bestmove '))done(score?null:new Error('No evaluation available'));
+      };
+      worker.postMessage('uci');
+    });
+  }
+}
