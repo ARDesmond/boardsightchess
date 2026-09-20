@@ -91,3 +91,9 @@ fixture was removed and is not included in the handoff.
 - Optional opening guidance identifies matching move orders in the existing 12 distinct repertoire lines, offers compatible variations and a SAN/coordinate next move. It reports out-of-book and completed lines explicitly; it is not an exhaustive opening encyclopedia or transposition detector. Practice guidance stays within the configured practice lines.
 - Validation: rule/repertoire tests pass; all 11 real-WASM opponent levels pass; analysis perspective, cancellation and restart pass. Browser verified move markers, capture/undo/flip rows, evaluation alongside computer play, opening suggestions and phone/desktop presentation, with no console errors.
 - Evaluation layout: vertical bar directly left of the board, matching its height; White/Black ends follow board flips. Toggle and numeric score remain below. Verified 390px layout has a 5px gap and no horizontal overflow.
+
+## Sandbox Stockfish suggestions
+- Analyze position requests up to three MultiPV candidates for the applied position and side to move, with SAN, coordinates, White-perspective evaluation and search depth.
+- Clicking a result highlights its origin/destination without playing it. Editing, importing, changing mode, or cancelling clears pending analysis and stale results.
+- Structural validation checks kings, pawns, piece counts, the non-moving king, castling rights and en passant metadata before launching Stockfish. It does not prove historical reachability. Checkmate/stalemate have no suggestions; positions with fewer than three legal moves show only the available moves.
+- Real-WASM tests passed for both turns, one legal move, promotion candidates, cancellation/restart and invalid-position rejection. Existing rules and all 11 opponent levels passed. Browser verified three suggestions, highlighting, empty-board validation, one legal move, cancellation and clearing during analysis.

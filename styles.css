@@ -184,6 +184,8 @@ textarea {resize:vertical;overflow-wrap:anywhere;font-family:ui-monospace,Consol
 .assistance-toggles {display:flex;gap:10px;flex-wrap:wrap;}
 .assistance-toggles button {flex:1;min-width:140px;}
 .board-assistance select {width:100%;max-width:100%;margin-top:6px;}
+.sandbox-candidates {display:grid;gap:8px;margin:10px 0;}
+.sandbox-candidates button {text-align:left;white-space:normal;font-size:.85rem;}
 .board-stage {display:grid;grid-template-columns:minmax(0,1fr);max-width:780px;margin:0 auto;align-items:stretch;}
 .board-stage.has-evaluation {grid-template-columns:22px minmax(0,1fr);gap:8px;}
 .board-stage .board-wrap {max-width:none;}

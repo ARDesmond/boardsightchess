@@ -99,3 +99,57 @@ class StockfishAnalysis extends StockfishOpponent {
     });
   }
 }
+
+// Reject unsafe edited positions before sending them to the engine. This is
+// structural legality checking, not a proof of historical reachability.
+function sandboxAnalysisError(game) {
+  const counts={w:{k:0,p:0,total:0},b:{k:0,p:0,total:0}};
+  for(const file of 'abcdefgh')for(let rank=1;rank<=8;rank++){
+    const piece=game.get(file+rank);if(!piece)continue;
+    counts[piece.color].total++;if(piece.type==='k')counts[piece.color].k++;
+    if(piece.type==='p'){counts[piece.color].p++;if(rank===1||rank===8)return 'Pawns cannot be on rank 1 or 8.';}
+  }
+  for(const color of ['w','b']){
+    if(counts[color].k!==1)return 'Place exactly one king of each color.';
+    if(counts[color].p>8||counts[color].total>16)return 'Each side may have at most 8 pawns and 16 pieces.';
+  }
+  const other=game.turn()==='w'?'b':'w';
+  if(game._isKingAttacked(other))return 'The side that just moved cannot be in check. Check the kings and side to move.';
+  for(const [right,king,rook,color] of [['K','e1','h1','w'],['Q','e1','a1','w'],['k','e8','h8','b'],['q','e8','a8','b']]){
+    if(game.castling[right]&&(game.get(king)?.type!=='k'||game.get(king)?.color!==color||game.get(rook)?.type!=='r'||game.get(rook)?.color!==color))return 'Castling rights do not match the kings and rooks. Update position settings.';
+  }
+  if(game.epSquare){
+    const file=game.epSquare[0],white=game.turn()==='w',pawn=game.get(file+(white?'5':'4'));
+    if(game.epSquare[1]!== (white?'6':'3')||game.get(game.epSquare)||game.get(file+(white?'7':'2'))||pawn?.type!=='p'||pawn.color!==other||game.halfmoveClock!==0)return 'En passant target does not match a just-completed pawn double move.';
+  }
+  return null;
+}
+
+class StockfishCandidates extends StockfishOpponent {
+  analyze(fen,legalMoves){
+    this.cancel();if(!legalMoves.length)return Promise.resolve([]);
+    const count=Math.min(3,legalMoves.length);
+    return new Promise((resolve,reject)=>{
+      const worker=new Worker('vendor/stockfish/stockfish.js');this.worker=worker;
+      const depths=new Map();let finished=false;
+      const done=(error,result)=>{if(finished)return;finished=true;clearTimeout(timer);worker.terminate();this.worker=null;this.pending=null;error?reject(error):resolve(result);};
+      const timer=setTimeout(()=>done(new Error('Analysis timed out. Try again.')),20000);
+      this.pending={reject:done};worker.onerror=()=>done(new Error('Stockfish could not load. Try again.'));
+      worker.onmessage=({data})=>{
+        const line=String(data);
+        if(line==='uciok'){worker.postMessage('setoption name Hash value 16');worker.postMessage('setoption name MultiPV value '+count);worker.postMessage('isready');}
+        if(line==='readyok'){worker.postMessage('position fen '+fen);worker.postMessage('go movetime 1500');}
+        const match=line.match(/info depth (\d+).*?multipv (\d+).*?score (cp|mate) (-?\d+).*? pv ([a-h][1-8][a-h][1-8][qrbn]?)/);
+        if(match&&!/bound/.test(line)&&legalMoves.includes(match[5])){
+          const depth=Number(match[1]);if(!depths.has(depth))depths.set(depth,new Map());
+          depths.get(depth).set(Number(match[2]),{move:match[5],kind:match[3],value:Number(match[4])*(fen.split(' ')[1]==='w'?1:-1),depth});
+        }
+        if(line.startsWith('bestmove ')){
+          const complete=[...depths.keys()].sort((a,b)=>b-a).find(depth=>depths.get(depth).size===count);
+          if(complete===undefined)return done(new Error('No complete candidate set. Try again.'));
+          done(null,[...depths.get(complete).entries()].sort((a,b)=>a[0]-b[0]).map(entry=>entry[1]));
+        }
+      };worker.postMessage('uci');
+    });
+  }
+}

@@ -19,6 +19,8 @@ const PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen'
 
 const opponent = new StockfishOpponent();
 const analysis = new StockfishAnalysis();
+const sandboxEngine=new StockfishCandidates();
+let sandboxAnalysisVersion=0,sandboxSuggestion=null;
 let evalEnabled=false,evalFen=null,evalTimer=null,evalVersion=0,guideEnabled=false,guideKey='';
 let mode = 'game', orientation = 'w', generation = 0, botTimer = null;
 let animationBusy = false, drag = null, suppressClick = false, inspected = null, releaseVisual = null;
@@ -91,6 +93,10 @@ app.innerHTML = `
           <label for="fen">FEN position</label><textarea id="fen" rows="3" spellcheck="false"></textarea>
           <div class="button-pair"><button id="import-fen">Import FEN</button><button id="export-fen">Export FEN</button></div>
           <p id="fen-message" aria-live="polite"></p>
+          <button id="analyze-sandbox" class="primary-button">Analyze position · top 3 moves</button>
+          <button id="cancel-sandbox-analysis" class="secondary-button hidden">Cancel analysis</button>
+          <p id="sandbox-analysis-status" aria-live="polite"></p><div id="sandbox-candidates" class="sandbox-candidates"></div>
+          <p class="tip">Moves are ranked for the side to move. Scores favor White when positive, Black when negative. Select a suggestion to highlight it; the position stays unchanged. Apply position settings before analyzing.</p>
         </section>
         <section class="card">
           <h2>Game setup</h2><div id="game-setup">
@@ -297,6 +303,7 @@ function renderBoard() {
 
     if (destinations.includes(square)) squareEl.classList.add('opening-target');
     if (selectedSquare === square) squareEl.classList.add('selected');
+    if(mode==='sandbox'&&sandboxSuggestion&&(square===sandboxSuggestion.slice(0,2)||square===sandboxSuggestion.slice(2,4)))squareEl.classList.add('opening-target');
     const legalTarget=mode!=='sandbox'&&legalTargets.find(move=>move.to===square);
     if(legalTarget){
       const marker=document.createElement('span');marker.className='legal-marker'+(legalTarget.captured?' capture-marker':'');marker.setAttribute('aria-hidden','true');squareEl.appendChild(marker);
@@ -519,6 +526,7 @@ const uci=move=>move.from+move.to+(move.promotion||'');
 function mapVisible(){return mapModeEl.value==='always'||(mapModeEl.value==='hold'&&holdRevealActive);}
 function acceptedMoves(){return repertoireMoves(OPENINGS.find(o=>o.id===$('#opening').value),$('#variation').value,game.history({verbose:true}).map(uci));}
 function invalidate(){
+  clearSandboxAnalysis();
   stopEvaluation();
   ++generation;clearTimeout(botTimer);opponent.cancel();isComputerThinking=false;animationBusy=false;
   thinkingEl.classList.add('hidden');$('#retry-bot').classList.add('hidden');
@@ -588,6 +596,7 @@ async function executeMove(from,to,promotion='q'){
   const piece=game.get(from);if(!piece)return;
   const token=generation;let move;
   if(mode==='sandbox'){
+    clearSandboxAnalysis();
     game.remove(from);game.put(piece,to);move={from,to};
   }else{
     try{move=game.move({from,to,promotion});}catch{return;}
@@ -649,6 +658,7 @@ boardEl.addEventListener('contextmenu',event=>{if(event.target.closest('.piece')
 window.addEventListener('blur',()=>{cancelDrag();if(!animationBusy)renderBoard();});
 window.addEventListener('resize',()=>{cancelDrag();if(animationBusy){invalidate();renderBoard();scheduleComputerMove();}});
 function syncSandbox(){
+  clearSandboxAnalysis();
   $('#side-to-move').value=game.turn();$('#castling').value=game.fen().split(' ')[2];$('#en-passant').value=game.epSquare||'-';$('#fen').value=game.fen();
 }
 function loadSandbox(fen){
@@ -744,6 +754,37 @@ function renderAssistance(){
 $('#eval-toggle').onclick=()=>{evalEnabled=!evalEnabled;stopEvaluation();$('#eval-toggle').textContent='Evaluation '+(evalEnabled?'ON':'OFF');$('#eval-toggle').setAttribute('aria-pressed',String(evalEnabled));renderAssistance();};
 $('#guide-toggle').onclick=()=>{guideEnabled=!guideEnabled;$('#guide-toggle').textContent='Opening guidance '+(guideEnabled?'ON':'OFF');$('#guide-toggle').setAttribute('aria-pressed',String(guideEnabled));renderAssistance();};
 $('#guide-line').onchange=()=>{guideKey=$('#guide-line').value;renderAssistance();};
+function clearSandboxAnalysis(){
+  ++sandboxAnalysisVersion;sandboxEngine.cancel();sandboxSuggestion=null;
+  $('#sandbox-candidates').replaceChildren();$('#sandbox-analysis-status').textContent='';
+  $('#analyze-sandbox').disabled=false;$('#cancel-sandbox-analysis').classList.add('hidden');
+}
+$('#cancel-sandbox-analysis').onclick=()=>{clearSandboxAnalysis();$('#sandbox-analysis-status').textContent='Analysis cancelled.';renderBoard();};
+for(const id of ['fen','castling','en-passant'])$('#'+id).addEventListener('input',()=>{clearSandboxAnalysis();renderBoard();});
+$('#analyze-sandbox').onclick=async()=>{
+  if(mode!=='sandbox'||animationBusy)return;
+  clearSandboxAnalysis();clearSelection();renderBoard();
+  const fen=game.fen(),error=sandboxAnalysisError(game);
+  if(error){$('#sandbox-analysis-status').textContent=error;return;}
+  const legal=game.moves({verbose:true}).map(uci);
+  if(!legal.length){$('#sandbox-analysis-status').textContent=game.inCheck()?'Checkmate — no legal moves.':'Stalemate — no legal moves.';return;}
+  const version=sandboxAnalysisVersion;
+  $('#analyze-sandbox').disabled=true;$('#cancel-sandbox-analysis').classList.remove('hidden');
+  $('#sandbox-analysis-status').textContent='Analyzing '+colorName(game.turn())+' to move…';
+  try{
+    const candidates=await sandboxEngine.analyze(fen,legal);
+    if(version!==sandboxAnalysisVersion||fen!==game.fen()||mode!=='sandbox')return;
+    $('#sandbox-analysis-status').textContent=`${candidates.length} suggested moves for ${colorName(game.turn())} · depth ${candidates[0].depth}`;
+    for(const [index,candidate] of candidates.entries()){
+      const preview=new Chess(fen),move=preview.move(candidate.move),button=document.createElement('button');
+      const score=candidate.kind==='mate'?(candidate.value>=0?'White':'Black')+' mates in '+Math.abs(candidate.value):(candidate.value>=0?'+':'')+(candidate.value/100).toFixed(2);
+      button.textContent=`${index+1}. ${move.san} (${move.from} → ${move.to}) · ${score}`;button.setAttribute('aria-pressed','false');
+      button.onclick=()=>{if(game.fen()!==fen)return;sandboxSuggestion=candidate.move;for(const sibling of button.parentElement.children)sibling.setAttribute('aria-pressed',String(sibling===button));renderBoard();};
+      $('#sandbox-candidates').appendChild(button);
+    }
+  }catch(error){if(version===sandboxAnalysisVersion&&error.message!=='cancelled')$('#sandbox-analysis-status').textContent=error.message;}
+  finally{if(version===sandboxAnalysisVersion){$('#analyze-sandbox').disabled=false;$('#cancel-sandbox-analysis').classList.add('hidden');}}
+};
 startNewGame();
 
 

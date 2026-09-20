@@ -4,8 +4,8 @@ class Worker {
   postMessage(s){this.process.stdin.write(s+'\n');}
   terminate(){this.process.kill();}
 }
-const context=vm.createContext({Worker,setTimeout,clearTimeout,console});vm.runInContext(fs.readFileSync('chess.js','utf8')+fs.readFileSync('engine.js','utf8')+';globalThis.api={Chess,StockfishOpponent,StockfishAnalysis,BOT_LEVELS};',context);
-const {Chess,StockfishOpponent,StockfishAnalysis,BOT_LEVELS}=context.api;
+const context=vm.createContext({Worker,setTimeout,clearTimeout,console});vm.runInContext(fs.readFileSync('chess.js','utf8')+fs.readFileSync('engine.js','utf8')+';globalThis.api={Chess,StockfishOpponent,StockfishAnalysis,StockfishCandidates,sandboxAnalysisError,BOT_LEVELS};',context);
+const {Chess,StockfishOpponent,StockfishAnalysis,StockfishCandidates,sandboxAnalysisError,BOT_LEVELS}=context.api;
 (async()=>{
  const opponent=new StockfishOpponent(),g=new Chess();g.move('e2e4');
  const legal=g.moves({verbose:true}).map(m=>m.from+m.to+(m.promotion||''));
@@ -18,5 +18,16 @@ const {Chess,StockfishOpponent,StockfishAnalysis,BOT_LEVELS}=context.api;
  const interrupted=analysis.analyze(g.fen()).then(()=>assert.fail('Analysis cancellation resolved'),e=>assert.equal(e.message,'cancelled'));analysis.cancel();await interrupted;
  assert((await analysis.analyze(g.fen())).kind);analysis.cancel();
  console.log('PASS: analysis White perspective for either turn, cancellation and restart.');
+ const candidates=new StockfishCandidates();
+ for(const fen of [Chess.DEFAULT_POSITION,g.fen(),'8/8/8/8/8/1rk5/8/K7 w - - 0 1','7k/P7/8/8/8/8/8/4K3 w - - 0 1']){
+   const position=new Chess(fen);assert.equal(sandboxAnalysisError(position),null);
+   const legal=position.moves({verbose:true}).map(m=>m.from+m.to+(m.promotion||''));
+   const result=await candidates.analyze(fen,legal);assert.equal(result.length,Math.min(3,legal.length));assert.equal(new Set(result.map(c=>c.move)).size,result.length);
+   for(const c of result){assert(legal.includes(c.move));assert(new Chess(fen).move(c.move).san);}
+ }
+ for(const fen of ['8/8/8/8/8/8/8/4K3 w - - 0 1','7k/8/8/8/8/8/8/P3K3 w - - 0 1','7k/8/8/8/8/8/8/4K3 w K - 0 1','7k/8/8/8/8/8/8/4K3 w - e6 0 1','8/8/8/8/8/8/4k3/4K3 w - - 0 1'])assert(sandboxAnalysisError(new Chess(fen)));
+ const cancelledCandidates=candidates.analyze(g.fen(),legal).then(()=>assert.fail('Candidates cancellation resolved'),e=>assert.equal(e.message,'cancelled'));candidates.cancel();await cancelledCandidates;
+ assert.equal((await candidates.analyze(g.fen(),legal)).length,3);candidates.cancel();
+ console.log('PASS: sandbox validation, MultiPV for either turn, one legal move, promotion, cancellation and restart.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
 
