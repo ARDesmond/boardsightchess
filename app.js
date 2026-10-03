@@ -27,6 +27,8 @@ let animationBusy = false, drag = null, suppressClick = false, inspected = null,
 let hintVisible = false, trainingMessage = '', promotionPending = null;
 let game = new Chess();
 let gameStartTurn='w',customPosition=false;
+let gameRootFen=Chess.DEFAULT_POSITION,reviewSession=null,reviewArchive=null,reviewSerial=0;
+const reviewEngine=new StockfishReview();
 let checkmateTimer=null,checkmatePendingFen=null,checkmateShownFen=null;
 let selectedSquare = null;
 let legalTargets = [];
@@ -68,7 +70,7 @@ app.innerHTML = `
               <p class="checkmate-eyebrow">Checkmate</p>
               <div class="checkmate-pieces" aria-hidden="true"><img id="checkmate-winner-piece" class="checkmate-winner-piece" alt=""><img id="checkmate-loser-piece" class="checkmate-loser-piece" alt=""></div>
               <h2 id="checkmate-winner"></h2><p id="checkmate-loser"></p><p id="checkmate-player"></p>
-              <div class="button-pair"><button id="checkmate-close">View final position</button><button id="checkmate-new" class="primary-button">New game</button></div>
+              <button id="checkmate-review" class="primary-button">Walk through game</button><div class="button-pair"><button id="checkmate-close">View final position</button><button id="checkmate-new" class="primary-button">New game</button></div>
             </div>
           </section>
         </div>
@@ -82,6 +84,23 @@ app.innerHTML = `
       </div>
 
       <aside class="side-panel">
+        <section class="card hidden" id="review-panel" aria-label="Game walkthrough">
+          <h2>BoardSight walkthrough</h2>
+          <div class="coach-layout"><svg class="coach-mascot" viewBox="0 0 212 226" role="img" aria-label="BoardSight, a smiling chessboard coach"><g fill="none" stroke="#674525" stroke-width="9" stroke-linecap="round"><path d="M37 103 Q15 111 10 89"/><path class="coach-wave" d="M176 93 Q203 87 201 58"/><path d="M77 179 L70 208"/><path d="M136 179 L144 208"/></g><g fill="#a77a2a" stroke="#674525" stroke-width="3"><ellipse cx="10" cy="85" rx="9" ry="11"/><ellipse cx="200" cy="53" rx="9" ry="11"/><ellipse cx="66" cy="214" rx="18" ry="8"/><ellipse cx="149" cy="214" rx="18" ry="8"/><rect x="32" y="20" width="148" height="166" rx="13"/></g><rect x="42" y="30" width="16" height="16" fill="#fff4db"/><rect x="58" y="30" width="16" height="16" fill="#aa8057"/><rect x="74" y="30" width="16" height="16" fill="#fff4db"/><rect x="90" y="30" width="16" height="16" fill="#aa8057"/><rect x="106" y="30" width="16" height="16" fill="#fff4db"/><rect x="122" y="30" width="16" height="16" fill="#aa8057"/><rect x="138" y="30" width="16" height="16" fill="#fff4db"/><rect x="154" y="30" width="16" height="16" fill="#aa8057"/><rect x="42" y="46" width="16" height="16" fill="#aa8057"/><rect x="58" y="46" width="16" height="16" fill="#fff4db"/><rect x="74" y="46" width="16" height="16" fill="#aa8057"/><rect x="90" y="46" width="16" height="16" fill="#fff4db"/><rect x="106" y="46" width="16" height="16" fill="#aa8057"/><rect x="122" y="46" width="16" height="16" fill="#fff4db"/><rect x="138" y="46" width="16" height="16" fill="#aa8057"/><rect x="154" y="46" width="16" height="16" fill="#fff4db"/><rect x="42" y="62" width="16" height="16" fill="#8db6d8"/><rect x="58" y="62" width="16" height="16" fill="#8db6d8"/><rect x="74" y="62" width="16" height="16" fill="#8db6d8"/><rect x="90" y="62" width="16" height="16" fill="#8db6d8"/><rect x="106" y="62" width="16" height="16" fill="#fff4db"/><rect x="122" y="62" width="16" height="16" fill="#aa8057"/><rect x="138" y="62" width="16" height="16" fill="#fff4db"/><rect x="154" y="62" width="16" height="16" fill="#aa8057"/><rect x="42" y="78" width="16" height="16" fill="#aa8057"/><rect x="58" y="78" width="16" height="16" fill="#fff4db"/><rect x="74" y="78" width="16" height="16" fill="#aa8057"/><rect x="90" y="78" width="16" height="16" fill="#fff4db"/><rect x="106" y="78" width="16" height="16" fill="#bc8991"/><rect x="122" y="78" width="16" height="16" fill="#bc8991"/><rect x="138" y="78" width="16" height="16" fill="#bc8991"/><rect x="154" y="78" width="16" height="16" fill="#bc8991"/><rect x="42" y="94" width="16" height="16" fill="#fff4db"/><rect x="58" y="94" width="16" height="16" fill="#aa8057"/><rect x="74" y="94" width="16" height="16" fill="#fff4db"/><rect x="90" y="94" width="16" height="16" fill="#b19ac6"/><rect x="106" y="94" width="16" height="16" fill="#b19ac6"/><rect x="122" y="94" width="16" height="16" fill="#aa8057"/><rect x="138" y="94" width="16" height="16" fill="#fff4db"/><rect x="154" y="94" width="16" height="16" fill="#aa8057"/><rect x="42" y="110" width="16" height="16" fill="#aa8057"/><rect x="58" y="110" width="16" height="16" fill="#fff4db"/><rect x="74" y="110" width="16" height="16" fill="#aa8057"/><rect x="90" y="110" width="16" height="16" fill="#fff4db"/><rect x="106" y="110" width="16" height="16" fill="#aa8057"/><rect x="122" y="110" width="16" height="16" fill="#fff4db"/><rect x="138" y="110" width="16" height="16" fill="#aa8057"/><rect x="154" y="110" width="16" height="16" fill="#fff4db"/><rect x="42" y="126" width="16" height="16" fill="#fff4db"/><rect x="58" y="126" width="16" height="16" fill="#aa8057"/><rect x="74" y="126" width="16" height="16" fill="#fff4db"/><rect x="90" y="126" width="16" height="16" fill="#aa8057"/><rect x="106" y="126" width="16" height="16" fill="#fff4db"/><rect x="122" y="126" width="16" height="16" fill="#aa8057"/><rect x="138" y="126" width="16" height="16" fill="#fff4db"/><rect x="154" y="126" width="16" height="16" fill="#aa8057"/><rect x="42" y="142" width="16" height="16" fill="#aa8057"/><rect x="58" y="142" width="16" height="16" fill="#fff4db"/><rect x="74" y="142" width="16" height="16" fill="#aa8057"/><rect x="90" y="142" width="16" height="16" fill="#fff4db"/><rect x="106" y="142" width="16" height="16" fill="#aa8057"/><rect x="122" y="142" width="16" height="16" fill="#fff4db"/><rect x="138" y="142" width="16" height="16" fill="#aa8057"/><rect x="154" y="142" width="16" height="16" fill="#fff4db"/><g stroke="#3c2c20" stroke-width="3"><ellipse cx="83" cy="91" rx="13" ry="17" fill="#fffaf0"/><ellipse cx="130" cy="91" rx="13" ry="17" fill="#fffaf0"/><circle cx="85" cy="94" r="6" fill="#3c2c20"/><circle cx="128" cy="94" r="6" fill="#3c2c20"/><path d="M72 67 Q83 60 94 66 M119 66 Q130 60 140 67" fill="none" stroke-linecap="round"/><path d="M83 118 Q106 137 130 118 Q106 155 83 118Z" fill="#fffaf0"/></g><rect x="38" y="161" width="136" height="20" rx="5" fill="#674525"/><text x="106" y="176" text-anchor="middle" font-family="Georgia,serif" font-weight="bold" font-size="16" fill="#fff4db">BoardSight</text></svg><div class="coach-bubble" role="status" aria-live="polite"><h3 id="coach-title">Let's learn from this game</h3><p id="coach-tip"></p><p id="coach-line"></p><p id="coach-score" class="tip"></p></div></div>
+          <p id="review-progress" aria-live="polite"></p>
+          <div class="button-pair"><button id="review-stop-prev">Previous tip</button><button id="review-stop-next">Next tip</button></div>
+          <div class="button-pair"><button id="review-played">Show played move</button><button id="review-best">Show stronger move</button></div>
+          <button id="review-before" class="secondary-button">Before this move</button>
+          <p id="review-position" aria-live="polite"></p>
+          <div class="review-navigation"><button id="review-first" aria-label="Starting position">|‹</button><button id="review-prev" aria-label="Previous move">‹</button><button id="review-next" aria-label="Next move">›</button><button id="review-last" aria-label="Final position">›|</button></div>
+          <div id="review-moves" class="review-moves" aria-label="Game moves"></div>
+          <div class="control-group"><label for="review-side">Retry as</label><select id="review-side"><option value="w">White</option><option value="b">Black</option></select></div>
+          <div class="control-group"><label for="review-strength">Computer strength</label><select id="review-strength">${BOT_LEVELS.map(elo=>`<option value="${elo}" ${elo===1000?'selected':''}>${elo}${elo===2200?'+':''}</option>`).join('')}</select></div>
+          <button id="review-retry-position" class="primary-button">Play from here</button>
+          <div class="button-pair"><button id="review-analyze">Analyze game</button><button id="review-cancel" class="hidden">Stop analysis</button></div>
+          <button id="review-exit" class="secondary-button">Return to game</button>
+          <p class="tip">Short Stockfish analysis finds up to six learning stops. Scores are estimates, not a complete verdict. Your original game stays available in this tab.</p>
+        </section>
         <section class="card hidden" id="opening-panel">
           <h2>Opening practice</h2>
           <div class="control-group"><label for="opening">Opening</label><select id="opening"></select></div>
@@ -139,7 +158,7 @@ app.innerHTML = `
           </div>
           <div class="control-group"><label for="detail">Visualization</label><select id="detail"><option value="clean">Clean</option><option value="detailed">Detailed</option><option value="full">Full</option></select></div>
           <div class="button-stack">
-            <button id="new-game" class="primary-button">Play New Game</button>
+            <button id="new-game" class="primary-button">Play New Game</button><button id="review-open" class="secondary-button hidden">Walk through game</button>
             <button id="undo" class="secondary-button">Take Back Move</button><button id="retry-bot" class="secondary-button hidden">Retry computer move</button><p class="tip" id="game-info">Stockfish • Approximate ratings, not measured human Elo.</p>
           </div>
         </section>
@@ -408,6 +427,7 @@ function clearSelection() {
 }
 
 function onSquareClick(square) {
+  if(reviewSession){inspected=square;renderBoard();return;}
   inspected=square; renderSquareDetails(square,generateAttackMap());
   if(document.querySelector('#inspect-toggle').getAttribute('aria-pressed')==='true'){drawInspector();return;}
   if(animationBusy || promotionPending)return;
@@ -429,6 +449,7 @@ function hideCheckmateResult(){
   boardEl.querySelectorAll('.checkmate-king').forEach(piece=>piece.classList.remove('checkmate-king'));
 }
 function syncCheckmateResult(){
+  if(reviewSession){hideCheckmateResult();return;}
   if(mode==='sandbox'||!game.isCheckmate()){
     hideCheckmateResult();checkmateShownFen=null;return;
   }
@@ -453,6 +474,7 @@ function syncCheckmateResult(){
   },1000);
 }
 function renderStatus() {
+  if(reviewSession){statusEl.textContent='Review · '+(reviewSession.preview==='stronger'?'suggested alternative':reviewSession.cursor?'after '+reviewMoveName(reviewSession.data,reviewSession.cursor-1):'starting position');return;}
   if (game.isCheckmate()) {
     statusEl.textContent = `${colorName(opposite(game.turn()))} wins by checkmate.`;
     return;
@@ -480,7 +502,7 @@ function renderStatus() {
 }
 
 function scheduleComputerMove() {
-  if(mode==='sandbox'||game.turn()!==computerColor||game.isGameOver()||isComputerThinking)return;
+  if(reviewSession||mode==='sandbox'||game.turn()!==computerColor||game.isGameOver()||isComputerThinking)return;
   const accepted=mode==='opening'?acceptedMoves():[];
   if(mode==='opening'&&!accepted.length){renderExtras();return;}
   stopEvaluation();
@@ -501,10 +523,11 @@ function resolvePlayerColor() {
 }
 
 function startNewGame(fen) {
+  if(reviewSession)closeReview(false);stopReviewSearch();
   invalidate();checkmateShownFen=null;
   customPosition=typeof fen==='string';
   game = customPosition?new Chess(fen):new Chess();
-  gameStartTurn=game.turn();
+  gameStartTurn=game.turn();gameRootFen=game.fen();
   playerColor = mode==='opening'?document.querySelector('#practice-side').value:resolvePlayerColor();
   orientation=playerColor;hintVisible=false;trainingMessage='';inspected=null;
   computerColor = opposite(playerColor);
@@ -525,6 +548,7 @@ function startNewGame(fen) {
 }
 
 function takeBack() {
+  if(reviewSession)return;
   invalidate();
   if (!game.history().length) return;
   if (playerColor !== gameStartTurn && game.history().length === 1) return;
@@ -587,12 +611,18 @@ function renderExtras(){
   renderAssistance();
   $('#sight-toggle').textContent=mapVisible()?'Boardsight ON':'Boardsight OFF';
   $('#sight-toggle').setAttribute('aria-pressed',String(mapVisible()));
-  $('#game-setup').classList.toggle('hidden',mode!=='game'||game.history().length>0);
-  $('#game-setup').previousElementSibling.textContent=mode==='game'?'Game & Boardsight':'Boardsight';
-  $('#undo').classList.toggle('hidden',mode==='sandbox');
+  $('#game-setup').classList.toggle('hidden',!!reviewSession||mode!=='game'||game.history().length>0);
+  $('#game-setup').previousElementSibling.textContent=mode==='game'&&!reviewSession?'Game & Boardsight':'Boardsight';
+  $('#undo').classList.toggle('hidden',!!reviewSession||mode==='sandbox');
   $('#undo').disabled=!game.history().length||(playerColor!==gameStartTurn&&game.history().length===1);
-  $('#new-game').classList.toggle('hidden',mode!=='game');
-  $('#game-info').textContent=mode==='game'?`You: ${colorName(playerColor)} · Stockfish ≈ ${difficultyEl.value}${difficultyEl.value==='2200'?'+':''} Elo`:mode==='sandbox'?'Blue: White · Red: Black':'Practicing '+colorName(playerColor);
+  $('#new-game').classList.toggle('hidden',!!reviewSession||mode!=='game');
+  const canReview=mode==='game'&&((game.isGameOver()&&game.history().length)||reviewArchive);
+  $('#review-open').classList.toggle('hidden',!!reviewSession||!canReview);
+  $('#review-open').textContent=game.isGameOver()&&game.history().length?'Walk through game':'Previous game walkthrough';
+  $('.board-assistance').classList.toggle('hidden',!!reviewSession);
+  $('.app-shell').classList.toggle('reviewing',!!reviewSession);
+  if(reviewSession)renderReview();
+  $('#game-info').textContent=reviewSession?'Reviewing '+colorName(reviewSession.data.player)+' moves':mode==='game'?`You: ${colorName(playerColor)} · Stockfish ≈ ${difficultyEl.value}${difficultyEl.value==='2200'?'+':''} Elo`:mode==='sandbox'?'Blue: White · Red: Black':'Practicing '+colorName(playerColor);
   if(mode==='sandbox')statusEl.textContent='Sandbox · '+colorName(game.turn())+' to move';
   if(mode==='opening'){
     const moves=acceptedMoves();
@@ -642,7 +672,7 @@ function animatePiece(piece,from,to){
   return animation.finished.catch(()=>{}).then(()=>ghost.remove());
 }
 async function executeMove(from,to,promotion='q'){
-  if(animationBusy)return;
+  if(reviewSession||animationBusy)return;
   const piece=game.get(from);if(!piece)return;
   const token=generation;let move;
   if(mode==='sandbox'){
@@ -669,6 +699,7 @@ function cancelDrag(){
   drag=null;boardEl.querySelectorAll('.drop-target,.drag-origin').forEach(el=>el.classList.remove('drop-target','drag-origin'));
 }
 boardEl.addEventListener('pointerdown',event=>{
+  if(reviewSession)return;
   if(event.button!==0||drag||animationBusy||promotionPending||$('#inspect-toggle').getAttribute('aria-pressed')==='true')return;
   const source=event.target.closest('.piece'),square=source?.closest('[data-square]')?.dataset.square,piece=square&&game.get(square);
   if(!piece || (mode!=='sandbox'&&(isComputerThinking||piece.color!==playerColor||game.turn()!==playerColor||game.isGameOver())) || (mode==='sandbox'&&trayChoice!=='move'))return;
@@ -731,6 +762,7 @@ $('#sight-toggle').onclick=()=>{mapModeEl.value=mapVisible()?'off':'always';hold
 $('#flip').onclick=()=>{invalidate();orientation=opposite(orientation);renderBoard();scheduleComputerMove();};
 $('#inspect-toggle').onclick=()=>{cancelDrag();const button=$('#inspect-toggle');button.setAttribute('aria-pressed',String(button.getAttribute('aria-pressed')!=='true'));clearSelection();renderBoard();};
 for(const button of document.querySelectorAll('[data-mode]'))button.onclick=()=>{
+  if(reviewSession)closeReview(false);
   invalidate();mode=button.dataset.mode;for(const b of document.querySelectorAll('[data-mode]'))b.setAttribute('aria-pressed',String(b===button));
   $('#opening-panel').classList.toggle('hidden',mode!=='opening');$('#sandbox-panel').classList.toggle('hidden',mode!=='sandbox');
   $('#inspect-toggle').setAttribute('aria-pressed','false');
@@ -795,6 +827,7 @@ function renderAssistance(){
       row.appendChild(score);
     }
   }
+  if(reviewSession){stopEvaluation();return;}
   $('#guide-panel').classList.toggle('hidden',!guideEnabled);
   if(guideEnabled){
     const history=game.history({verbose:true}).map(uci);
@@ -871,4 +904,147 @@ $('#analyze-sandbox').onclick=async()=>{
   }catch(error){if(version===sandboxAnalysisVersion&&error.message!=='cancelled')$('#sandbox-analysis-status').textContent=error.message;}
   finally{if(version===sandboxAnalysisVersion){$('#analyze-sandbox').disabled=false;$('#cancel-sandbox-analysis').classList.add('hidden');}}
 };
+
+
+// Reviews use an immutable move/FEN snapshot. Navigation never undoes the live game.
+function reviewSnapshot(){
+  const moves=game.history({verbose:true}),position=new Chess(gameRootFen),frames=[position.fen()];
+  for(const move of moves){position.move({from:move.from,to:move.to,promotion:move.promotion||'q'});frames.push(position.fen());}
+  return {root:gameRootFen,moves,frames,player:playerColor,strength:difficultyEl.value,results:{},stops:[],complete:false};
+}
+function reviewPosition(index){
+  const position=new Chess(reviewSession.data.root);
+  for(let i=0;i<index;i++){const move=reviewSession.data.moves[i];position.move({from:move.from,to:move.to,promotion:move.promotion||'q'});}
+  return position;
+}
+function reviewMoveName(data,index){
+  const fields=data.frames[index].split(' '),move=data.moves[index];
+  return fields[5]+(move.color==='w'?'. ':'… ')+move.san;
+}
+function reviewScore(score){return score.kind==='mate'?(score.value>0?'White':'Black')+' mates in '+Math.abs(score.value):(score.value>=0?'+':'')+(score.value/100).toFixed(2);}
+function reviewLoss(best,played,color){
+  const sign=color==='w'?1:-1,b=best.value*sign,p=played.value*sign;
+  if(best.kind==='mate'&&b>0&&!(played.kind==='mate'&&p>0))return {kind:'missed-mate',weight:8000};
+  if(played.kind==='mate'&&p<0&&!(best.kind==='mate'&&b<0))return {kind:'allows-mate',weight:10000};
+  if(best.kind==='cp'&&played.kind==='cp'&&Math.min(best.depth,played.depth)>=8&&b-p>=150)return {kind:'opportunity',loss:b-p,weight:Math.min(7000,b-p)};
+  return null;
+}
+function reviewLine(fen,pv){
+  const position=new Chess(fen),line=[];
+  for(const uciMove of pv.slice(0,4)){try{const move=position.move(uciMove);if(!move)break;line.push(move.san);}catch{break;}}
+  return line.join(' → ');
+}
+function reviewTip(result){
+  const data=reviewSession.data,move=data.moves[result.index],before=new Chess(data.frames[result.index]);
+  const alternative=before.move(result.best.move),after=new Chess(data.frames[result.index]);after.move({from:move.from,to:move.to,promotion:move.promotion||'q'});
+  let lesson=result.kind==='allows-mate'?'This gives your opponent a forced mating line. Before moving, check their checks and threats to your king.':result.kind==='missed-mate'?'You had a forced mating line here. Look for forcing checks before choosing a quieter move.':'This move gave away a significant part of your advantage or made a difficult position worse.';
+  const reply=result.played.pv?.[1];
+  if(reply){try{const response=after.move(reply);if(response.captured)lesson+=' After your move, '+colorName(response.color)+' can capture your '+PIECE_NAMES[response.captured]+' on '+response.to+' with '+response.san+'.';else if(response.san.includes('+'))lesson+=' Their reply '+response.san+' puts your king in check.';}catch{}}
+  if(alternative.captured)lesson+=' The alternative captures a '+PIECE_NAMES[alternative.captured]+' on '+alternative.to+'.';
+  else if(alternative.san.includes('+')&&!alternative.san.includes('#'))lesson+=' The alternative starts with a forcing check.';
+  return 'You played '+move.san+'. '+lesson+' Try '+alternative.san+' and compare the continuation.';
+}
+function stopReviewSearch(){++reviewSerial;reviewEngine.cancel();if(reviewSession)reviewSession.analyzing=false;}
+function openReview(){
+  if(animationBusy||reviewSession)return;
+  const data=mode==='game'&&game.isGameOver()&&game.history().length?reviewSnapshot():reviewArchive;
+  if(!data)return;
+  const returnState={game,mode,orientation,lastMove,customPosition,gameRootFen,gameStartTurn,playerColor,computerColor};
+  stopReviewSearch();invalidate();reviewArchive=data;
+  reviewSession={data,returnState,cursor:0,preview:null,activeTip:null,analyzing:false,userMoved:false};
+  mode='game';playerColor=data.player;computerColor=opposite(playerColor);orientation=playerColor;
+  $('#review-side').value=data.player;$('#review-strength').value=data.strength;
+  $('#review-panel').classList.remove('hidden');
+  $('#review-moves').replaceChildren();
+  const first=document.createElement('button');first.textContent='Start';first.onclick=()=>goReview(0);$('#review-moves').appendChild(first);
+  data.moves.forEach((move,index)=>{const button=document.createElement('button');button.textContent=reviewMoveName(data,index);button.setAttribute('aria-label','Position after '+reviewMoveName(data,index));button.dataset.ply=index+1;button.onclick=()=>goReview(index+1);$('#review-moves').appendChild(button);});
+  goReview(0,false);$('#review-exit').focus({preventScroll:true});
+  if(!data.complete)analyzeReview();else if(data.stops.length)selectReviewTip(data.stops[0]);
+}
+function closeReview(render=true){
+  if(!reviewSession)return;
+  const state=reviewSession.returnState;stopReviewSearch();reviewSession=null;invalidate();
+  ({game,mode,orientation,lastMove,customPosition,gameRootFen,gameStartTurn,playerColor,computerColor}=state);
+  $('#review-panel').classList.add('hidden');clearSelection();
+  if(render){renderBoard();scheduleComputerMove();}
+}
+function goReview(index,user=true,keepTip=false){
+  if(!reviewSession)return;
+  const session=reviewSession;
+  session.cursor=Math.max(0,Math.min(session.data.moves.length,index));session.preview=null;
+  if(user)session.userMoved=true;if(!keepTip)session.activeTip=null;
+  game=reviewPosition(session.cursor);lastMove=session.cursor?session.data.moves[session.cursor-1]:null;clearSelection();renderBoard();renderReview();
+}
+function selectReviewTip(tip){reviewSession.activeTip=tip;goReview(tip.index,false,true);}
+function renderReview(){
+  if(!reviewSession)return;
+  const session=reviewSession,data=session.data,tip=session.activeTip,stopIndex=tip?data.stops.findIndex(stop=>stop.index===tip.index):-1;
+  $('#review-stop-prev').disabled=stopIndex<=0;$('#review-stop-next').disabled=!data.stops.length||stopIndex===data.stops.length-1;
+  $('#review-played').disabled=!tip;$('#review-best').disabled=!tip;$('#review-before').disabled=!tip;
+  $('#review-first').disabled=session.cursor===0&&!session.preview;$('#review-prev').disabled=session.cursor===0&&!session.preview;
+  $('#review-next').disabled=session.cursor>=data.moves.length;$('#review-last').disabled=session.cursor===data.moves.length&&!session.preview;
+  $('#review-retry-position').disabled=game.isGameOver();
+  $('#review-analyze').disabled=session.analyzing;$('#review-analyze').textContent=data.complete?'Analyze again':'Analyze game';
+  $('#review-cancel').classList.toggle('hidden',!session.analyzing);
+  $('#review-position').textContent=session.preview==='stronger'?'Suggested alternative to '+reviewMoveName(data,tip.index):session.cursor?'After '+reviewMoveName(data,session.cursor-1):'Starting position · '+colorName(game.turn())+' to move';
+  for(const button of $('#review-moves').children)button.setAttribute('aria-current',String(Number(button.dataset.ply||0)===session.cursor&&!session.preview));
+  if(tip){
+    $('#coach-title').textContent='Learning stop '+(stopIndex+1)+' of '+data.stops.length+' · '+reviewMoveName(data,tip.index);
+    $('#coach-tip').textContent=reviewTip(tip);
+    $('#coach-line').textContent='Stronger line: '+reviewLine(data.frames[tip.index],tip.best.pv);
+    $('#coach-score').textContent='Best alternative: '+reviewScore(tip.best)+' · Played move: '+reviewScore(tip.played)+' · scores favor White when positive.';
+  }else{
+    $('#coach-title').textContent=session.analyzing?'Let’s find your learning moments':data.complete&&!data.stops.length?'No clear mistake found in this short review':'Let’s walk through your game';
+    $('#coach-tip').textContent=session.analyzing?'I’m checking your '+colorName(data.player)+' moves. You can already rewind with the arrows. When tips are ready, use Next tip to visit a learning stop.':data.stops.length?'Use Next tip to pause before a move worth revisiting. Compare what you played with the stronger move, then try it yourself.':'Use the arrows or move list to replay the game. Try a position with Play from here. Short analysis can miss deeper ideas.';
+    $('#coach-line').textContent='';$('#coach-score').textContent='';
+  }
+}
+async function analyzeReview(){
+  if(!reviewSession)return;
+  stopReviewSearch();const token=reviewSerial,session=reviewSession,data=session.data;
+  session.analyzing=true;data.complete=false;
+  const playerMoves=data.moves.map((move,index)=>({move,index})).filter(item=>item.move.color===data.player);
+  let done=0;renderReview();
+  try{
+    for(const {move,index} of playerMoves){
+      if(token!==reviewSerial||reviewSession!==session)return;
+      $('#review-progress').textContent='Checking your move '+(done+1)+' of '+playerMoves.length+' · '+reviewMoveName(data,index);
+      if(!data.results[index]){
+        const position=new Chess(data.frames[index]),legal=position.moves({verbose:true}).map(uci),playedMove=uci(move);
+        const best=await reviewEngine.analyze(data.frames[index],legal);
+        if(token!==reviewSerial||reviewSession!==session)return;
+        const played=best.move===playedMove?best:await reviewEngine.analyze(data.frames[index],legal,playedMove);
+        if(token!==reviewSerial||reviewSession!==session)return;
+        const loss=best.move===playedMove?null:reviewLoss(best,played,data.player);
+        data.results[index]={index,best,played,...(loss||{}),learning:!!loss};
+      }
+      ++done;
+      data.stops=Object.values(data.results).filter(result=>result.learning).sort((a,b)=>b.weight-a.weight).slice(0,6).sort((a,b)=>a.index-b.index);
+      if(session.activeTip&&!data.stops.some(stop=>stop.index===session.activeTip.index))session.activeTip=null;
+      renderReview();
+    }
+    data.complete=true;session.analyzing=false;
+    $('#review-progress').textContent='Review ready · '+done+' of your moves checked · '+data.stops.length+' learning '+(data.stops.length===1?'stop':'stops');
+    if(!session.userMoved&&!session.activeTip&&data.stops.length)selectReviewTip(data.stops[0]);else renderReview();
+  }catch(error){
+    if(token!==reviewSerial||reviewSession!==session)return;
+    session.analyzing=false;$('#review-progress').textContent=error.message+' Your replay and completed tips are still available.';renderReview();
+  }finally{if(token===reviewSerial)reviewEngine.cancel();}
+}
+$('#review-open').onclick=openReview;$('#checkmate-review').onclick=openReview;
+$('#review-exit').onclick=()=>closeReview();
+$('#review-first').onclick=()=>goReview(0);$('#review-prev').onclick=()=>goReview(reviewSession.cursor-1);$('#review-next').onclick=()=>goReview(reviewSession.cursor+1);$('#review-last').onclick=()=>goReview(reviewSession.data.moves.length);
+$('#review-stop-prev').onclick=()=>{const stops=reviewSession.data.stops,index=stops.findIndex(stop=>stop.index===reviewSession.activeTip?.index);if(index>0)selectReviewTip(stops[index-1]);};
+$('#review-stop-next').onclick=()=>{const stops=reviewSession.data.stops,index=stops.findIndex(stop=>stop.index===reviewSession.activeTip?.index);if(index+1<stops.length)selectReviewTip(stops[index+1]);};
+$('#review-before').onclick=()=>goReview(reviewSession.activeTip.index,true,true);
+$('#review-played').onclick=()=>goReview(reviewSession.activeTip.index+1,true,true);
+$('#review-best').onclick=()=>{const session=reviewSession;game=reviewPosition(session.activeTip.index);lastMove=game.move(session.activeTip.best.move);session.cursor=session.activeTip.index;session.preview='stronger';session.userMoved=true;clearSelection();renderBoard();renderReview();};
+$('#review-analyze').onclick=()=>{reviewSession.data.results={};reviewSession.data.stops=[];reviewSession.activeTip=null;analyzeReview();};
+$('#review-cancel').onclick=()=>{stopReviewSearch();$('#review-progress').textContent='Analysis stopped. Replay and completed tips remain available.';renderReview();};
+$('#review-retry-position').onclick=()=>{
+  if(!reviewSession||game.isGameOver())return;
+  const fen=game.fen(),side=$('#review-side').value,strength=$('#review-strength').value;
+  reviewArchive=reviewSession.data;closeReview(false);playAsEl.value=side;difficultyEl.value=strength;mode='game';startNewGame(fen);
+};
+
 startNewGame();
