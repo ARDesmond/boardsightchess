@@ -22,7 +22,7 @@ class StockfishOpponent {
   async choose(fen,rating,legalMoves){
     this.cancel(); const id=this.serial;
     return new Promise((resolve,reject)=>{
-      const worker=new Worker('vendor/stockfish/stockfish.js'); this.worker=worker;
+      const worker=new Worker('vendor/stockfish/stockfish.js?v=railway-wasm-1'); this.worker=worker;
       const iterations=new Map(); let minElo=1320; let finished=false;
       const candidateCount=Math.min(64,legalMoves.length);
       const timer=setTimeout(()=>done(null,new Error('Engine timed out. Retry the computer move.')),20000);
@@ -81,7 +81,7 @@ class StockfishAnalysis extends StockfishOpponent {
   analyze(fen) {
     this.cancel();
     return new Promise((resolve,reject)=>{
-      const worker=new Worker('vendor/stockfish/stockfish.js');this.worker=worker;
+      const worker=new Worker('vendor/stockfish/stockfish.js?v=railway-wasm-1');this.worker=worker;
       let score=null,finished=false;
       const done=(error)=>{if(finished)return;finished=true;clearTimeout(timer);worker.terminate();this.worker=null;this.pending=null;error?reject(error):resolve(score);};
       const timer=setTimeout(()=>done(new Error('Analysis timed out')),20000);
@@ -130,7 +130,7 @@ class StockfishCandidates extends StockfishOpponent {
     this.cancel();if(!legalMoves.length)return Promise.resolve([]);
     const count=Math.min(3,legalMoves.length);
     return new Promise((resolve,reject)=>{
-      const worker=new Worker('vendor/stockfish/stockfish.js');this.worker=worker;
+      const worker=new Worker('vendor/stockfish/stockfish.js?v=railway-wasm-1');this.worker=worker;
       const depths=new Map();let finished=false;
       const done=(error,result)=>{if(finished)return;finished=true;clearTimeout(timer);worker.terminate();this.worker=null;this.pending=null;error?reject(error):resolve(result);};
       const timer=setTimeout(()=>done(new Error('Analysis timed out. Try again.')),20000);
