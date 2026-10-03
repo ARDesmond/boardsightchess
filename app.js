@@ -958,7 +958,8 @@ function openReview(){
   $('#review-moves').replaceChildren();
   const first=document.createElement('button');first.textContent='Start';first.onclick=()=>goReview(0);$('#review-moves').appendChild(first);
   data.moves.forEach((move,index)=>{const button=document.createElement('button');button.textContent=reviewMoveName(data,index);button.setAttribute('aria-label','Position after '+reviewMoveName(data,index));button.dataset.ply=index+1;button.onclick=()=>goReview(index+1);$('#review-moves').appendChild(button);});
-  goReview(0,false);$('#review-exit').focus({preventScroll:true});
+  goReview(0,false);$('#coach-title').tabIndex=-1;$('#coach-title').focus({preventScroll:true});
+  $('#review-panel').scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
   if(!data.complete)analyzeReview();else if(data.stops.length)selectReviewTip(data.stops[0]);
 }
 function closeReview(render=true){
