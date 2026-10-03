@@ -153,3 +153,53 @@ class StockfishCandidates extends StockfishOpponent {
     });
   }
 }
+
+// One full-strength worker per walkthrough; forced searches compare the played
+// move and the best alternative from the same position and score perspective.
+class StockfishReview {
+  constructor(){this.worker=null;this.boot=null;this.pending=null;this.bootReject=null;this.bootTimer=null;}
+  cancel(){
+    clearTimeout(this.bootTimer);this.bootTimer=null;
+    if(this.bootReject)this.bootReject(new Error('cancelled'));
+    this.bootReject=null;this.boot=null;
+    if(this.pending){clearTimeout(this.pending.timer);this.pending.reject(new Error('cancelled'));this.pending=null;}
+    this.worker?.terminate();this.worker=null;
+  }
+  ready(){
+    if(this.boot)return this.boot;
+    this.boot=new Promise((resolve,reject)=>{
+      this.bootReject=reject;
+      const worker=new Worker('vendor/stockfish/stockfish.js?v=railway-wasm-1');this.worker=worker;
+      const fail=error=>{if(this.bootReject){clearTimeout(this.bootTimer);this.bootReject(error);this.bootReject=null;}if(this.pending){clearTimeout(this.pending.timer);this.pending.reject(error);this.pending=null;}worker.terminate();if(this.worker===worker){this.worker=null;this.boot=null;}};
+      this.bootTimer=setTimeout(()=>fail(new Error('Review engine took too long to load. Try again.')),20000);
+      worker.onerror=()=>fail(new Error('Review engine could not load. Try again.'));
+      worker.onmessage=({data})=>{
+        if(this.worker!==worker)return;
+        const line=String(data);
+        if(line==='uciok'){worker.postMessage('setoption name Hash value 32');worker.postMessage('setoption name UCI_LimitStrength value false');worker.postMessage('setoption name MultiPV value 1');worker.postMessage('isready');}
+        if(line==='readyok'&&this.bootReject){clearTimeout(this.bootTimer);this.bootTimer=null;this.bootReject=null;resolve();}
+        const job=this.pending;if(!job)return;
+        const match=line.match(/info depth (\d+).*?score (cp|mate) (-?\d+).*? pv (.+)/);
+        if(match&&!/bound/.test(line))job.result={kind:match[2],value:Number(match[3])*job.sign,depth:Number(match[1]),pv:match[4].trim().split(/\s+/)};
+        if(line.startsWith('bestmove ')){
+          clearTimeout(job.timer);this.pending=null;
+          const move=line.split(' ')[1];
+          if(job.result&&job.legal.includes(move)&&(!job.forced||move===job.forced))job.resolve({...job.result,move});
+          else job.reject(new Error('No reliable review result. Try again.'));
+        }
+      };
+      worker.postMessage('uci');
+    });
+    return this.boot;
+  }
+  async analyze(fen,legal,forced=null){
+    await this.ready();
+    if(!this.worker)throw new Error('cancelled');
+    if(this.pending)throw new Error('Review search already running');
+    return new Promise((resolve,reject)=>{
+      this.pending={resolve,reject,sign:fen.split(' ')[1]==='w'?1:-1,legal,forced,result:null,timer:setTimeout(()=>{const job=this.pending;this.pending=null;job?.reject(new Error('Review search timed out. Try again.'));this.cancel();},20000)};
+      this.worker.postMessage('position fen '+fen);
+      this.worker.postMessage('go movetime 650'+(forced?' searchmoves '+forced:''));
+    });
+  }
+}
