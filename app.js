@@ -26,6 +26,7 @@ let mode = 'game', orientation = 'w', generation = 0, botTimer = null;
 let animationBusy = false, drag = null, suppressClick = false, inspected = null, releaseVisual = null;
 let hintVisible = false, trainingMessage = '', promotionPending = null;
 let game = new Chess();
+let gameStartTurn='w',customPosition=false;
 let selectedSquare = null;
 let legalTargets = [];
 let lastMove = null;
@@ -93,6 +94,12 @@ app.innerHTML = `
           <label for="fen">FEN position</label><textarea id="fen" rows="3" spellcheck="false"></textarea>
           <div class="button-pair"><button id="import-fen">Import FEN</button><button id="export-fen">Export FEN</button></div>
           <p id="fen-message" aria-live="polite"></p>
+          <div class="control-group"><label for="sandbox-play-as">Play position as</label><select id="sandbox-play-as"><option value="w">White</option><option value="b">Black</option></select></div>
+          <div class="control-group"><label for="sandbox-difficulty">Computer strength</label><select id="sandbox-difficulty">
+            ${BOT_LEVELS.map(elo=>`<option value="${elo}" ${elo===1000?'selected':''}>${elo}${elo===2200?'+':''}</option>`).join('')}
+          </select></div>
+          <button id="play-sandbox" class="primary-button">Play this position</button>
+          <p id="sandbox-play-status" aria-live="polite"></p>
           <button id="analyze-sandbox" class="primary-button">Analyze position · top 3 moves</button>
           <button id="cancel-sandbox-analysis" class="secondary-button hidden">Cancel analysis</button>
           <p id="sandbox-analysis-status" aria-live="polite"></p><div id="sandbox-candidates" class="sandbox-candidates"></div>
@@ -455,9 +462,11 @@ function resolvePlayerColor() {
   return choice;
 }
 
-function startNewGame() {
+function startNewGame(fen) {
   invalidate();
-  game = new Chess();
+  customPosition=typeof fen==='string';
+  game = customPosition?new Chess(fen):new Chess();
+  gameStartTurn=game.turn();
   playerColor = mode==='opening'?document.querySelector('#practice-side').value:resolvePlayerColor();
   orientation=playerColor;hintVisible=false;trainingMessage='';inspected=null;
   computerColor = opposite(playerColor);
@@ -474,13 +483,13 @@ function startNewGame() {
     computer_strength: difficultyEl.value,
     control_map: mapModeEl.value,
   });
-  if (computerColor === 'w') scheduleComputerMove();
+  if (game.turn() === computerColor) scheduleComputerMove();
 }
 
 function takeBack() {
   invalidate();
   if (!game.history().length) return;
-  if (playerColor === 'b' && game.history().length === 1) return;
+  if (playerColor !== gameStartTurn && game.history().length === 1) return;
 
   game.undo();
   if (game.turn() !== playerColor && game.history().length) game.undo();
@@ -540,7 +549,7 @@ function renderExtras(){
   $('#game-setup').classList.toggle('hidden',mode!=='game'||game.history().length>0);
   $('#game-setup').previousElementSibling.textContent=mode==='game'?'Game & Boardsight':'Boardsight';
   $('#undo').classList.toggle('hidden',mode==='sandbox');
-  $('#undo').disabled=!game.history().length||(playerColor==='b'&&game.history().length===1);
+  $('#undo').disabled=!game.history().length||(playerColor!==gameStartTurn&&game.history().length===1);
   $('#new-game').classList.toggle('hidden',mode!=='game');
   $('#game-info').textContent=mode==='game'?`You: ${colorName(playerColor)} · Stockfish ≈ ${difficultyEl.value}${difficultyEl.value==='2200'?'+':''} Elo`:mode==='sandbox'?'Blue: White · Red: Black':'Practicing '+colorName(playerColor);
   if(mode==='sandbox')statusEl.textContent='Sandbox · '+colorName(game.turn())+' to move';
@@ -684,12 +693,34 @@ for(const button of document.querySelectorAll('[data-mode]'))button.onclick=()=>
   invalidate();mode=button.dataset.mode;for(const b of document.querySelectorAll('[data-mode]'))b.setAttribute('aria-pressed',String(b===button));
   $('#opening-panel').classList.toggle('hidden',mode!=='opening');$('#sandbox-panel').classList.toggle('hidden',mode!=='sandbox');
   $('#inspect-toggle').setAttribute('aria-pressed','false');
-  if(mode==='sandbox'){playerColor='w';computerColor='b';clearSelection();syncSandbox();renderBoard();}else startNewGame();
+  if(mode==='sandbox'){$('#sandbox-play-as').value=playAsEl.value==='b'?'b':'w';$('#sandbox-difficulty').value=difficultyEl.value;playerColor='w';computerColor='b';clearSelection();syncSandbox();renderBoard();}else startNewGame();
 };
 for(const choice of ['move','erase',...Object.keys(PIECES)]){
   const b=document.createElement('button');b.type='button';b.textContent=PIECES[choice]||choice;if(PIECES[choice])b.dataset.art=choice;b.setAttribute('aria-label',PIECES[choice]?colorName(choice[0])+' '+PIECE_NAMES[choice[1]]:choice);b.setAttribute('aria-pressed',String(choice==='move'));
   b.onclick=()=>{trayChoice=choice;clearSelection();for(const el of b.parentElement.children)el.setAttribute('aria-pressed',String(el===b));renderBoard();};$('#piece-tray').appendChild(b);
 }
+$('#play-sandbox').onclick=()=>{
+  if(mode!=='sandbox'||animationBusy)return;
+  const status=$('#sandbox-play-status');
+  try{
+    const fields=game.fen().split(' ');
+    fields[1]=$('#side-to-move').value;
+    fields[2]=$('#castling').value.trim();
+    fields[3]=$('#en-passant').value.trim();
+    const position=new Chess(fields.join(' '));
+    const error=sandboxAnalysisError(position);
+    if(error){status.textContent=error;return;}
+    if(position.isGameOver()){status.textContent='This position is already game over. Edit it before playing.';return;}
+    playAsEl.value=$('#sandbox-play-as').value;
+    difficultyEl.value=$('#sandbox-difficulty').value;
+    mode='game';
+    for(const button of document.querySelectorAll('[data-mode]'))button.setAttribute('aria-pressed',String(button.dataset.mode===mode));
+    $('#opening-panel').classList.add('hidden');$('#sandbox-panel').classList.add('hidden');
+    $('#inspect-toggle').setAttribute('aria-pressed','false');
+    status.textContent='';
+    startNewGame(position.fen());
+  }catch(error){status.textContent=error.message+' — position unchanged.';}
+};
 $('#clear-board').onclick=()=>loadSandbox('8/8/8/8/8/8/8/8 w - - 0 1');
 $('#start-position').onclick=()=>loadSandbox(Chess.DEFAULT_POSITION);
 $('#import-fen').onclick=()=>loadSandbox($('#fen').value);
@@ -726,7 +757,7 @@ function renderAssistance(){
   $('#guide-panel').classList.toggle('hidden',!guideEnabled);
   if(guideEnabled){
     const history=game.history({verbose:true}).map(uci);
-    let lines=mode==='sandbox'?[]:openingContinuations(history);
+    let lines=mode==='sandbox'||customPosition?[]:openingContinuations(history);
     if(mode==='opening'){
       const opening=OPENINGS.find(item=>item.id===$('#opening').value);
       const practiceLines=$('#variation').value==='family'?opening.lines:[opening.lines[Number($('#variation').value)]];
@@ -738,7 +769,7 @@ function renderAssistance(){
     guideKey=select.value;select.disabled=!lines.length;
     const line=lines.find(line=>line.key===guideKey);
     const common=lines.length&&lines.every(item=>item.name.split(' — ')[0]===lines[0].name.split(' — ')[0]);
-    $('#opening-name').textContent=mode==='sandbox'?'Opening recognition is unavailable for edited positions.':!lines.length?'Out of book — no matching line in this repertoire.':!history.length?'Starting position — choose a line to explore.':common?'Opening: '+lines[0].name.split(' — ')[0]:'Several openings remain possible — choose a continuation.';
+    $('#opening-name').textContent=mode==='sandbox'||customPosition?'Opening recognition is unavailable for edited positions.':!lines.length?'Out of book — no matching line in this repertoire.':!history.length?'Starting position — choose a line to explore.':common?'Opening: '+lines[0].name.split(' — ')[0]:'Several openings remain possible — choose a continuation.';
     const next=line?.moves[history.length];
     if(next){const preview=new Chess(game.fen());const move=preview.move(next);$('#guide-next').textContent=colorName(game.turn())+' next: '+move.san+' ('+next.slice(0,2)+' → '+next.slice(2,4)+')'+(game.turn()!==playerColor?' — opponent’s reply; your move follows.':'.');}
     else $('#guide-next').textContent=line?'Selected repertoire line complete.':'No book suggestion for this position.';
@@ -800,4 +831,3 @@ $('#analyze-sandbox').onclick=async()=>{
   finally{if(version===sandboxAnalysisVersion){$('#analyze-sandbox').disabled=false;$('#cancel-sandbox-analysis').classList.add('hidden');}}
 };
 startNewGame();
-
