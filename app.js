@@ -702,12 +702,26 @@ window.addEventListener('keydown',event=>{
 });
 function stopEvaluation(){clearTimeout(evalTimer);analysis.cancel();evalFen=null;++evalVersion;}
 function renderAssistance(){
+  const materialValues={p:1,n:3,b:3,r:5,q:9,k:0};
+  const material={w:0,b:0};
+  for(const file of FILES)for(const rank of RANKS){
+    const piece=game.get(file+rank);
+    if(piece)material[piece.color]+=materialValues[piece.type]||0;
+  }
   for(const [id,color] of [['captures-top',opposite(orientation)],['captures-bottom',orientation]]){
     const row=$('#'+id);row.replaceChildren();
     const label=document.createElement('span');label.textContent=colorName(color)+' captured: ';row.appendChild(label);
     const captures=mode==='sandbox'?[]:game.history({verbose:true}).filter(move=>move.color===color&&move.captured);
     for(const move of captures){const img=document.createElement('img');img.src='assets/pieces/'+opposite(color)+move.captured.toUpperCase()+'.svg';img.alt=colorName(opposite(color))+' '+PIECE_NAMES[move.captured];row.appendChild(img);}
     if(!captures.length)row.appendChild(document.createTextNode(mode==='sandbox'?'Not tracked in Sandbox':'None'));
+    const advantage=material[color]-material[opposite(color)];
+    if(advantage>0){
+      const score=document.createElement('strong');score.className='material-advantage';
+      score.textContent=' +'+advantage;
+      score.title=colorName(color)+' is ahead by '+advantage+' material points (pawn 1, knight/bishop 3, rook 5, queen 9).';
+      score.setAttribute('aria-label',colorName(color)+' is ahead by '+advantage+' material points');
+      row.appendChild(score);
+    }
   }
   $('#guide-panel').classList.toggle('hidden',!guideEnabled);
   if(guideEnabled){
@@ -786,5 +800,4 @@ $('#analyze-sandbox').onclick=async()=>{
   finally{if(version===sandboxAnalysisVersion){$('#analyze-sandbox').disabled=false;$('#cancel-sandbox-analysis').classList.add('hidden');}}
 };
 startNewGame();
-
 
