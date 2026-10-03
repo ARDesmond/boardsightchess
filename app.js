@@ -48,7 +48,7 @@ app.innerHTML = `
         <div class="brand-heading"><img class="brand-mark" src="favicon.svg" alt="" width="82" height="80"><h1><span class="brand-board">Board</span><span class="brand-sight">sight</span> Chess</h1></div>
         <p>See every square you control, every square your opponent controls, and where the board is contested.</p>
       </div>
-      <div class="privacy-badge">No login • No saved games • Free</div>
+      <div class="privacy-badge">No login • Free</div>
     </header>
 
     <nav class="mode-tabs" aria-label="Training mode">
