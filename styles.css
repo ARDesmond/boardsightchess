@@ -237,3 +237,21 @@ textarea {resize:vertical;overflow-wrap:anywhere;font-family:ui-monospace,Consol
 @media(max-width:620px){.mode-tabs button:before{display:block;margin:0 auto 5px;width:18px;height:18px;}.board-toolbar button:before{margin-right:4px;width:14px;height:14px;}.mode-tabs button{min-height:58px;}}
 /* Keep 320px layouts inside the usable viewport even with classic scrollbars. */
 @media(max-width:620px){body{min-width:0;}.brand h1{font-size:clamp(1.5rem,7.6vw,2.5rem);}.mode-tabs button,.board-toolbar button{min-width:0;}}
+
+/* BoardSight checkmate presentation. */
+.checkmate-result{position:absolute;inset:0;z-index:25;display:grid;place-items:center;padding:16px;background:rgb(35 27 19 / .42);animation:checkmate-reveal .45s ease-out both;}
+.checkmate-card{width:min(100%,390px);padding:24px;border:2px solid var(--brass);border-radius:14px;background:var(--panel-bg-raised);box-shadow:0 16px 45px rgb(0 0 0 / .3);text-align:center;animation:checkmate-card-enter .6s cubic-bezier(.2,.8,.2,1) both;}
+.checkmate-eyebrow{margin:0;color:var(--brass);font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.18em;}
+.checkmate-card h2{margin:4px 0 8px;font-size:clamp(1.7rem,5vw,2.5rem);}
+.checkmate-card p{margin:8px 0;}
+.checkmate-card .button-pair{margin-top:20px;}
+.checkmate-pieces{display:flex;justify-content:center;align-items:center;gap:26px;height:95px;margin:10px 0;}
+.checkmate-pieces img{width:70px;height:70px;filter:drop-shadow(0 4px 2px rgb(0 0 0 / .2));}
+.checkmate-winner-piece{animation:checkmate-winner-rise .75s ease-out both;}
+.checkmate-loser-piece,.square .piece.checkmate-king{transform-origin:50% 85%;animation:checkmate-king-fall .75s .15s ease-in-out both;}
+@keyframes checkmate-reveal{from{opacity:0;}to{opacity:1;}}
+@keyframes checkmate-card-enter{from{opacity:0;transform:translateY(18px) scale(.94);}to{opacity:1;transform:translateY(0) scale(1);}}
+@keyframes checkmate-winner-rise{0%{transform:translateY(12px);opacity:0;}65%{transform:translateY(-7px);opacity:1;}100%{transform:translateY(0);opacity:1;}}
+@keyframes checkmate-king-fall{0%{transform:rotate(0);}25%{transform:rotate(-10deg);}100%{transform:rotate(65deg);}}
+@media(max-width:480px){.checkmate-result{padding:10px;}.checkmate-card{padding:15px;}.checkmate-pieces{height:65px;margin:4px 0;}.checkmate-pieces img{width:50px;height:50px;}.checkmate-card .button-pair{margin-top:12px;}}
+@media(prefers-reduced-motion:reduce){.checkmate-result,.checkmate-card,.checkmate-winner-piece,.checkmate-loser-piece,.square .piece.checkmate-king{animation:none;}}
