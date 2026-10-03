@@ -27,6 +27,7 @@ let animationBusy = false, drag = null, suppressClick = false, inspected = null,
 let hintVisible = false, trainingMessage = '', promotionPending = null;
 let game = new Chess();
 let gameStartTurn='w',customPosition=false;
+let checkmateTimer=null,checkmatePendingFen=null,checkmateShownFen=null;
 let selectedSquare = null;
 let legalTargets = [];
 let lastMove = null;
@@ -62,6 +63,14 @@ app.innerHTML = `
           <div id="eval-panel" class="eval-rail hidden" aria-label="Position evaluation"><span id="eval-top-side">B</span><div class="eval-track" aria-hidden="true"><div id="eval-fill"></div></div><span id="eval-bottom-side">W</span></div>
         <div class="board-wrap">
           <div id="board" class="board" role="grid" aria-label="Chess board"></div>
+          <section id="checkmate-result" class="checkmate-result hidden" aria-label="Checkmate result" aria-live="polite">
+            <div class="checkmate-card">
+              <p class="checkmate-eyebrow">Checkmate</p>
+              <div class="checkmate-pieces" aria-hidden="true"><img id="checkmate-winner-piece" class="checkmate-winner-piece" alt=""><img id="checkmate-loser-piece" class="checkmate-loser-piece" alt=""></div>
+              <h2 id="checkmate-winner"></h2><p id="checkmate-loser"></p><p id="checkmate-player"></p>
+              <div class="button-pair"><button id="checkmate-close">View final position</button><button id="checkmate-new" class="primary-button">New game</button></div>
+            </div>
+          </section>
         </div>
         </div>
         <div id="captures-bottom" class="capture-row"></div>
@@ -367,7 +376,7 @@ function renderBoard() {
   const detailSquare=$('#inspect-toggle').getAttribute('aria-pressed')==='true'?inspected:hoveredSquare;
   if (detailSquare) renderSquareDetails(detailSquare, attackMap);
   if(focused) boardEl.querySelector('[data-square="'+focused+'"]').focus({preventScroll:true});
-  renderStatus(); renderExtras();
+  renderStatus(); renderExtras(); syncCheckmateResult();
 }
 
 function describeSquare(square, attackMap) {
@@ -414,6 +423,35 @@ function onSquareClick(square) {
 }
 function makePlayerMove(from,to){attemptMove(from,to);}
 
+function hideCheckmateResult(){
+  clearTimeout(checkmateTimer);checkmateTimer=null;checkmatePendingFen=null;
+  $('#checkmate-result').classList.add('hidden');
+  boardEl.querySelectorAll('.checkmate-king').forEach(piece=>piece.classList.remove('checkmate-king'));
+}
+function syncCheckmateResult(){
+  if(mode==='sandbox'||!game.isCheckmate()){
+    hideCheckmateResult();checkmateShownFen=null;return;
+  }
+  const fen=game.fen();
+  if(checkmateShownFen===fen||checkmatePendingFen===fen)return;
+  hideCheckmateResult();checkmatePendingFen=fen;
+  checkmateTimer=setTimeout(()=>{
+    checkmateTimer=null;checkmatePendingFen=null;
+    if(mode==='sandbox'||game.fen()!==fen||!game.isCheckmate())return;
+    checkmateShownFen=fen;
+    const loser=game.turn(),winner=opposite(loser);
+    $('#checkmate-winner').textContent=colorName(winner)+' wins';
+    $('#checkmate-loser').textContent=colorName(loser)+' loses by checkmate.';
+    $('#checkmate-player').textContent=winner===playerColor?'You won. Well played!':'Computer won. Try another game.';
+    $('#checkmate-winner-piece').src='assets/pieces/'+winner+'K.svg';
+    $('#checkmate-loser-piece').src='assets/pieces/'+loser+'K.svg';
+    for(const square of boardEl.querySelectorAll('[data-square]')){
+      const piece=game.get(square.dataset.square);
+      if(piece?.type==='k'&&piece.color===loser)square.querySelector('.piece')?.classList.add('checkmate-king');
+    }
+    $('#checkmate-result').classList.remove('hidden');
+  },1000);
+}
 function renderStatus() {
   if (game.isCheckmate()) {
     statusEl.textContent = `${colorName(opposite(game.turn()))} wins by checkmate.`;
@@ -463,7 +501,7 @@ function resolvePlayerColor() {
 }
 
 function startNewGame(fen) {
-  invalidate();
+  invalidate();checkmateShownFen=null;
   customPosition=typeof fen==='string';
   game = customPosition?new Chess(fen):new Chess();
   gameStartTurn=game.turn();
@@ -502,6 +540,8 @@ function takeBack() {
 }
 
 document.querySelector('#new-game').addEventListener('click', startNewGame);
+document.querySelector('#checkmate-close').addEventListener('click',hideCheckmateResult);
+document.querySelector('#checkmate-new').addEventListener('click',()=>{mode='game';for(const button of document.querySelectorAll('[data-mode]'))button.setAttribute('aria-pressed',String(button.dataset.mode===mode));$('#opening-panel').classList.add('hidden');startNewGame();});
 document.querySelector('#undo').addEventListener('click', takeBack);
 mapModeEl.addEventListener('change', renderBoard);
 
@@ -535,6 +575,7 @@ const uci=move=>move.from+move.to+(move.promotion||'');
 function mapVisible(){return mapModeEl.value==='always'||(mapModeEl.value==='hold'&&holdRevealActive);}
 function acceptedMoves(){return repertoireMoves(OPENINGS.find(o=>o.id===$('#opening').value),$('#variation').value,game.history({verbose:true}).map(uci));}
 function invalidate(){
+  hideCheckmateResult();
   clearSandboxAnalysis();
   stopEvaluation();
   ++generation;clearTimeout(botTimer);opponent.cancel();isComputerThinking=false;animationBusy=false;
