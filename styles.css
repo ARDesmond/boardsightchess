@@ -255,3 +255,28 @@ textarea {resize:vertical;overflow-wrap:anywhere;font-family:ui-monospace,Consol
 @keyframes checkmate-king-fall{0%{transform:rotate(0);}25%{transform:rotate(-10deg);}100%{transform:rotate(65deg);}}
 @media(max-width:480px){.checkmate-result{padding:10px;}.checkmate-card{padding:15px;}.checkmate-pieces{height:65px;margin:4px 0;}.checkmate-pieces img{width:50px;height:50px;}.checkmate-card .button-pair{margin-top:12px;}}
 @media(prefers-reduced-motion:reduce){.checkmate-result,.checkmate-card,.checkmate-winner-piece,.checkmate-loser-piece,.square .piece.checkmate-king{animation:none;}}
+
+/* Original BoardSight coach and post-game learning walkthrough. */
+#review-panel{grid-column:1/-1;}
+#review-panel h2{font-size:1.3rem;margin-bottom:6px;}
+.coach-layout{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.coach-mascot{display:block;width:128px;height:136px;overflow:visible;animation:coach-rise .65s cubic-bezier(.2,.8,.2,1) both;}
+.coach-bubble{position:relative;width:100%;padding:14px;background:#fffaf0;border:2px solid var(--brass);border-radius:16px;box-shadow:0 4px 12px rgb(90 64 26 / .1);}
+.coach-bubble:before{content:'';position:absolute;top:-10px;left:calc(50% - 9px);width:16px;height:16px;background:#fffaf0;border-top:2px solid var(--brass);border-left:2px solid var(--brass);transform:rotate(45deg);}
+.coach-bubble h3{margin:0 0 8px;font-size:1rem;line-height:1.4;}
+.coach-bubble p{margin:8px 0;font-size:.92rem;line-height:1.5;}
+.coach-bubble p:empty{display:none;}
+.coach-bubble #coach-score{font-size:.78rem;color:var(--text-muted);}
+#review-panel .button-pair{margin:8px 0;}
+#review-panel>button{width:100%;margin:5px 0;}
+#review-progress,#review-position{font-size:.85rem;line-height:1.4;}
+.review-navigation{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;}
+.review-navigation button{font-size:1.4rem;min-height:40px;padding:4px;}
+.review-moves{display:flex;flex-wrap:wrap;gap:4px;max-height:110px;overflow-y:auto;padding:8px 2px;margin:5px 0 12px;border-bottom:1px solid var(--border);}
+.review-moves button{font-size:.8rem;min-height:32px;padding:4px 8px;}
+.review-moves button[aria-current=true]{background:var(--brass);color:#fffaf0;border-color:var(--brass);}
+.app-shell.reviewing .board-column{position:sticky;top:12px;align-self:start;}
+@keyframes coach-rise{from{opacity:0;transform:translateY(32px) rotate(-5deg);}to{opacity:1;transform:translateY(0) rotate(0);}}
+@media(max-width:900px){.app-shell.reviewing .board-column{position:static;}#review-panel{grid-column:1/-1;}.coach-layout{display:grid;grid-template-columns:132px minmax(0,1fr);align-items:center;gap:14px;}.coach-bubble:before{top:calc(50% - 9px);left:-10px;transform:rotate(-45deg);}}
+@media(max-width:480px){.coach-layout{display:flex;gap:8px;}.coach-mascot{width:110px;height:117px;}.coach-bubble:before{top:-10px;left:calc(50% - 9px);transform:rotate(45deg);}}
+@media(prefers-reduced-motion:reduce){.coach-mascot{animation:none;}}
