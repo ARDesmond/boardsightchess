@@ -20,17 +20,66 @@
   <link rel="manifest" href="site.webmanifest" />
   <title>BoardSight Chess — See Board Control</title>
   <link rel="stylesheet" href="styles.css?v=walkthrough-1">
-  <!-- Microsoft Clarity -->
-<script type="text/javascript">
-    (function(c,l,a,r,i,t,y){
-        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-    })(window, document, "clarity", "script", "ys6vqqz70s");
-</script>
 </head>
 <body>
   <div id="app"></div>
   <script src="chess.js"></script><script src="openings.js"></script><script src="engine.js?v=difficulty-1"></script><script src="app.js?v=header-1"></script>
+
+<style>
+.bs-privacy-footer{padding:16px;text-align:center;font:14px system-ui;color:#24344a}.bs-privacy-footer a,.bs-privacy-footer button{color:#24344a;text-decoration:underline;background:none;border:0;font:inherit;cursor:pointer;margin:0 10px;padding:8px}
+#bs-consent{position:relative;max-width:960px;margin:16px auto;padding:20px;background:#fff;border:1px solid #a8b2bd;border-radius:12px;color:#172638;font:16px/1.5 system-ui;box-sizing:border-box}#bs-consent[hidden]{display:none}#bs-consent h2{font-size:20px;margin:0 0 8px}#bs-consent p{margin:8px 0}#bs-consent label{display:block;margin:14px 0}#bs-consent input{width:18px;height:18px;vertical-align:middle}#bs-consent .bs-actions{display:flex;gap:12px;flex-wrap:wrap}#bs-consent button,#bs-privacy button{padding:10px 16px;border:1px solid #24344a;border-radius:6px;background:#fff;color:#172638;font:16px system-ui;cursor:pointer}#bs-consent button:disabled{opacity:.5;cursor:not-allowed}#bs-consent a,#bs-privacy a{color:#174985;text-decoration:underline}
+#bs-privacy{width:min(720px,calc(100% - 32px));max-height:85vh;padding:24px;box-sizing:border-box;border:1px solid #a8b2bd;border-radius:12px;background:white;color:#172638;font:16px/1.6 system-ui}#bs-privacy::backdrop{background:rgba(0,0,0,.45)}#bs-privacy h1{font-size:26px}#bs-privacy h2{font-size:20px}
+</style>
+<section id="bs-consent" aria-labelledby="bs-consent-title" hidden>
+<h2 id="bs-consent-title">Optional analytics</h2>
+<p>With your permission, BoardSight uses Microsoft Clarity to record clicks, taps, scrolling and session replays so we can improve the game. Usage information is sent to Microsoft. You can play without accepting. <a href="#privacy">Read our privacy policy</a>.</p>
+
+<div class="bs-actions"><button type="button" id="bs-accept">Accept analytics</button><button type="button" id="bs-reject">Reject analytics</button></div>
+<p id="bs-consent-status" role="status"></p>
+<p>Change your choice using Analytics settings below. Turning analytics off reloads the page and may end your current game.</p>
+</section>
+<footer class="bs-privacy-footer"><span>We use Microsoft Clarity to improve BoardSight.</span><a href="#privacy">Privacy</a><button type="button" id="bs-settings">Analytics settings</button></footer>
+<dialog id="bs-privacy" aria-labelledby="bs-policy-title">
+<button type="button" id="bs-close-policy">Close</button>
+<h1 id="bs-policy-title">BoardSight privacy policy</h1><p>Updated October 3, 2026</p>
+<p>BoardSight is a chess training website. This policy explains how information is used when you play.</p>
+<h2>Website hosting</h2><p>Our hosting provider, Railway, processes information needed to deliver and operate the website, including IP addresses, requested pages, browser information, timestamps and technical request logs. This processing is separate from optional analytics.</p>
+<h2>Optional Microsoft Clarity analytics</h2><p>Where consent is required, we only enable analytics after you accept. Elsewhere, analytics are enabled unless you opt out. we use Microsoft Clarity to understand how visitors use BoardSight and improve usability. Clarity can collect clicks or taps, scrolling, session replays, page URLs, timestamps, browser and device information, and network information such as your IP address. Clarity uses cookies to associate visits. Information is sent to and processed by Microsoft.</p>
+<p>We do not request advertising consent and send Microsoft a denied advertising-storage choice. Microsoft handles received information under the <a href="https://privacy.microsoft.com/privacystatement" target="_blank" rel="noopener noreferrer">Microsoft Privacy Statement</a>. See also <a href="https://learn.microsoft.com/en-us/clarity/faq" target="_blank" rel="noopener noreferrer">Clarity's privacy and retention information</a>. Ordinary Clarity recordings are generally available for 30 days; favorite recordings can be retained longer under Microsoft's retention rules.</p>
+<h2>Regional privacy controls</h2><p>We request a country code from Cloudflare to decide whether to show a consent prompt. Cloudflare receives your IP address and ordinary request information for this lookup. We do not request GPS location or save your IP address for this feature. If the lookup fails, we show the consent prompt. IP-based location can be approximate, especially with a VPN. See the <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">Cloudflare Privacy Policy</a>.</p><h2>Your choices</h2><p>Clarity stays off until we have determined your approximate country. For visitors in the EEA, UK or Switzerland, or when the country cannot be determined, Clarity does not load unless you accept analytics. Elsewhere, it loads by default unless you reject analytics or send a Global Privacy Control signal. Rejecting analytics does not prevent playing. We remember your choice on this device for up to six months using local browser storage. You can reopen Analytics settings to change it. Withdrawing consent stops further collection after the page reloads and clears accessible Clarity cookies on this site; it does not automatically delete data previously sent to Microsoft. We honor a browser Global Privacy Control signal by keeping Clarity off.</p>
+<h2>Younger visitors</h2><p>BoardSight is not specifically directed at children or teenagers. Visitors under 18 should reject analytics. If you are under 18, please turn off analytics using Analytics settings.</p>
+<h2>Questions and privacy requests</h2><p>Contact <a href="mailto:andrew@signalwellmarketing.com">andrew@signalwellmarketing.com</a> with privacy questions or requests, including requests concerning access or deletion. We will review requests under applicable rules and the capabilities of our service providers.</p>
+</dialog>
+<script>
+(function(){
+'use strict';
+var key='boardsight-analytics-choice-v1', ttl=180*24*60*60*1000, loaded=false, choice=null;
+var panel=document.getElementById('bs-consent'), accept=document.getElementById('bs-accept'), status=document.getElementById('bs-consent-status'), policy=document.getElementById('bs-privacy');
+var gpc=navigator.globalPrivacyControl===true;
+try{var saved=JSON.parse(localStorage.getItem(key));if(saved&&saved.version===1&&saved.time<=Date.now()&&Date.now()-saved.time<ttl&&(saved.value==='accepted'||saved.value==='rejected'))choice=saved.value;}catch(e){}
+function clearCookies(){document.cookie.split(';').forEach(function(item){var name=item.trim().split('=')[0];if(name!=='_clck'&&name!=='_clsk')return;var domains=['',location.hostname,'.'+location.hostname];var parts=location.hostname.split('.');for(var i=1;i<parts.length-1;i++)domains.push('.'+parts.slice(i).join('.'));domains.forEach(function(domain){document.cookie=name+'=; Max-Age=0; path=/'+(domain?'; domain='+domain:'');});});}
+function load(){if(loaded||gpc)return;loaded=true;window.clarity=window.clarity||function(){(window.clarity.q=window.clarity.q||[]).push(arguments);};window.clarity('consentv2',{analytics_Storage:'granted',ad_Storage:'denied'});var s=document.createElement('script');s.async=true;s.src='https://www.clarity.ms/tag/ys6vqqz70s';document.head.appendChild(s);}
+function save(value){choice=value;try{localStorage.setItem(key,JSON.stringify({version:1,value:value,time:Date.now()}));}catch(e){}panel.hidden=true;if(value==='accepted')load();else{if(loaded&&window.clarity)window.clarity('consentv2',{analytics_Storage:'denied',ad_Storage:'denied'});clearCookies();if(loaded)location.reload();}}
+accept.addEventListener('click',function(){if(!gpc)save('accepted');});
+document.getElementById('bs-reject').addEventListener('click',function(){save('rejected');});
+document.getElementById('bs-settings').addEventListener('click',function(){panel.hidden=false;accept.disabled=gpc;status.textContent=gpc?'Your browser requests privacy protection. Analytics remain off.':loaded?'Analytics are currently enabled.':'Analytics are currently off.';panel.scrollIntoView({behavior:'smooth',block:'center'});accept.focus();});
+function openPolicy(){if(location.hash==='#privacy'&&!policy.open)policy.showModal();}
+document.getElementById('bs-close-policy').addEventListener('click',function(){policy.close();});
+policy.addEventListener('close',function(){if(location.hash==='#privacy')history.replaceState(null,'',location.pathname+location.search);});
+window.addEventListener('hashchange',openPolicy);openPolicy();
+async function initialize(){
+ if(gpc){clearCookies();status.textContent='Your browser requests privacy protection. Analytics remain off.';return;}
+ if(choice==='rejected'){clearCookies();return;}
+ var country='',controller=new AbortController(),timer=setTimeout(function(){controller.abort();},4000);
+ try{var response=await fetch('https://www.cloudflare.com/cdn-cgi/trace',{credentials:'omit',referrerPolicy:'no-referrer',cache:'no-store',signal:controller.signal});if(response.ok){var text=await response.text();var match=text.match(/^loc=([A-Z]{2})$/m);if(match)country=match[1];}}catch(e){}finally{clearTimeout(timer);}
+ var regions='AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE IS LI NO GB CH';
+ var required=!country||country==='XX'||regions.split(' ').indexOf(country)!==-1;
+ panel.dataset.region=country||'unknown';panel.dataset.consentRequired=String(required);
+ if(choice==='accepted'||!required){load();}else{clearCookies();panel.hidden=false;}
+}
+initialize();
+})();
+</script>
+
 </body>
 </html>
