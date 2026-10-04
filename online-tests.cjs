@@ -59,12 +59,19 @@ test('threefold repetition is authoritative', () => {
   }
   assert.deepEqual(context.rooms.view(context.a.id).room.result, { winner: null, reason: 'threefold repetition' });
 });
-test('draw offers can be declined, cannot be self-accepted, clear on a move and can end a game', () => {
+test('draw offers pause both players until declined or accepted and cannot be self-accepted', () => {
   const context = setup(); match(context); const { rooms, a, b } = context;
   const action = (player, action) => rooms.action(player.id, { action, version: rooms.view(player.id).room.version });
   action(a, 'offer-draw'); assert.throws(() => action(a, 'accept-draw'), /No opponent/);
+  const offered = rooms.view(a.id).room;
+  assert.throws(() => move(context, a, 'e2e4'), /paused/);
+  assert.throws(() => move(context, b, 'e7e5'), /paused/);
+  assert.deepEqual(rooms.view(a.id).room.moves, []);
+  assert.equal(rooms.view(a.id).room.version, offered.version);
   action(b, 'decline-draw'); assert.equal(rooms.view(a.id).room.drawOffer, null);
-  action(b, 'offer-draw'); move(context, a, 'e2e4'); assert.equal(rooms.view(b.id).room.drawOffer, null);
+  move(context, a, 'e2e4');
+  action(b, 'offer-draw'); assert.throws(() => move(context, b, 'e7e5'), /paused/);
+  action(a, 'decline-draw'); move(context, b, 'e7e5');
   action(a, 'offer-draw'); action(b, 'accept-draw');
   assert.equal(rooms.view(a.id).room.result.reason, 'draw agreement');
 });

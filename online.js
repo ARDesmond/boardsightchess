@@ -26,20 +26,30 @@
       <div class="online-invite"><span>Room code</span><strong id="online-room-code"></strong><div class="button-pair"><button id="online-copy-code">Copy code</button><button id="online-copy-link">Copy invite</button></div></div>
       <p id="online-seats"></p><p id="online-rules" class="tip"></p><p id="online-presence" role="status"></p>
       <div id="online-game-actions" class="button-pair"><button id="online-draw">Offer draw</button><button id="online-resign">Resign</button></div>
-      <div id="online-resign-confirm" class="hidden online-choice"><p>Resign this game? Your opponent will win.</p><div class="button-pair"><button id="online-resign-yes">Yes, resign</button><button id="online-resign-no">Keep playing</button></div></div>
-      <div id="online-draw-response" class="hidden online-choice"><p>Your opponent offered a draw.</p><div class="button-pair"><button id="online-draw-yes">Accept draw</button><button id="online-draw-no">Decline</button></div></div>
-      <p id="online-draw-pending" class="tip hidden">Draw offered. Waiting for your opponent.</p>
+      <dialog id="online-resign-confirm" aria-labelledby="online-resign-title"><h2 id="online-resign-title">Resign this game?</h2><p>Your opponent will win.</p><div class="button-pair"><button id="online-resign-yes">Yes, resign</button><button id="online-resign-no">Keep playing</button></div></dialog>
+      <dialog id="online-draw-response" aria-labelledby="online-draw-title"><h2 id="online-draw-title">Your opponent offered a draw</h2><p>Play is paused. Accept to end this game in a draw, or decline to continue playing.</p><div class="button-pair"><button id="online-draw-yes" class="primary-button">Accept draw</button><button id="online-draw-no">Decline</button></div><p id="online-draw-connection" class="tip" role="status"></p></dialog>
+      <p id="online-draw-pending" class="tip hidden">Draw offered. Play is paused until your opponent accepts or declines.</p>
       <button id="online-leave">Back to lobby</button>
       <p class="tip">Refresh this tab to reconnect. Closing it may lose your guest seat. Replays and tips unlock after the game ends.</p>
     </div>`;
   $('.side-panel').prepend(panel);
+  const boardControls = document.createElement('section');
+  boardControls.id = 'online-board-controls'; boardControls.className = 'card hidden';
+  boardControls.setAttribute('aria-label', 'Online game controls');
+  boardControls.setAttribute('data-clarity-mask', 'true');
+  boardControls.innerHTML = '<p id="online-board-summary" role="status"></p>';
+  for (const id of ['online-game-actions', 'online-draw-pending', 'online-leave']) boardControls.append($('#' + id));
+  $('.board-stage').after(boardControls);
   let token = null;
   try { token = sessionStorage.getItem('boardsight-guest'); $('#online-name').value = sessionStorage.getItem('boardsight-nickname') || ''; } catch {}
   let started = false, connected = false, busy = false, state = { room: null, queued: false }, displayKey = null;
+  let stateEpoch = 0, refreshing = false;
   const setError = message => { $('#online-error').textContent = message || ''; $('#online-error').classList.toggle('hidden', !message); };
   function accept(next) {
     if (next.room && state.room?.code === next.room.code && next.room.version < state.room.version) return;
+    if (JSON.stringify(next) === JSON.stringify(state)) return;
     state = next;
+    ++stateEpoch;
     if (mode === 'online' && !reviewSession) restoreBoard();
     else render();
   }
@@ -56,7 +66,7 @@
     }
     renderBoard();
   }
-  function canMove() { return connected && !busy && state.room?.status === 'playing' && game.turn() === state.room.yourColor; }
+  function canMove() { return connected && !busy && state.room?.status === 'playing' && !state.room.drawOffer && game.turn() === state.room.yourColor; }
   function statusText() {
     const room = state.room;
     if (room?.status === 'finished') return room.result.winner ? colorName(room.result.winner) + ' wins by ' + room.result.reason + '.' : 'Draw by ' + room.result.reason + '.';
@@ -64,11 +74,21 @@
     if (state.queued) return 'Quickplay · Looking for an opponent';
     if (!room) return 'Online play · Create a room, join, or find an opponent';
     if (room.status === 'waiting') return 'Room ' + room.code + ' · Waiting for a friend';
+    if (room.drawOffer) return 'Play paused · Waiting for the draw decision';
     return colorName(game.turn()) + ' to move' + (game.inCheck() ? ' — check!' : '') + (game.turn() === room.yourColor ? ' · Your turn' : ' · Opponent’s turn');
   }
   function render() {
     panel.classList.toggle('hidden', mode !== 'online' || !!reviewSession);
     const room = state.room;
+    const activeOnline = mode === 'online' && !reviewSession && !!room;
+    boardControls.classList.toggle('hidden', !activeOnline);
+    $('.app-shell').classList.toggle('online-active', activeOnline);
+    $('#online-board-summary').textContent = room ? 'You play ' + colorName(room.yourColor) + ' · ' + (room.status === 'waiting' ? 'Waiting for a friend' : room.status === 'finished' ? statusText() : room.drawOffer ? 'Play paused for draw decision' : room.opponentConnected ? 'Opponent connected' : 'Opponent reconnecting') : '';
+    const drawDialog = $('#online-draw-response');
+    const incomingDraw = mode === 'online' && !reviewSession && room?.status === 'playing' && room.drawOffer && room.drawOffer !== room.yourColor;
+    if (incomingDraw && !drawDialog.open) drawDialog.showModal();
+    else if (!incomingDraw && drawDialog.open) drawDialog.close();
+    $('#online-draw-connection').textContent = connected ? '' : 'Reconnecting… Your decision will be available when connected.';
     $('#online-connection').textContent = connected ? 'Connected · Moves stay in sync automatically' : 'Connecting… Your game will resume here.';
     $('#online-connection').classList.toggle('is-connected', connected);
     $('#online-lobby').classList.toggle('hidden', !!room || state.queued);
@@ -87,11 +107,10 @@
       $('#online-game-actions').classList.toggle('hidden', room.status !== 'playing');
       $('#online-leave').classList.toggle('hidden', room.status === 'playing');
       $('#online-leave').textContent = room.status === 'waiting' ? 'Cancel room' : 'Back to lobby';
-      $('#online-draw-response').classList.toggle('hidden', room.status !== 'playing' || !room.drawOffer || room.drawOffer === room.yourColor);
       $('#online-draw-pending').classList.toggle('hidden', room.drawOffer !== room.yourColor);
       $('#online-draw').disabled = !!room.drawOffer || busy || !connected;
-      if (room.status !== 'playing') $('#online-resign-confirm').classList.add('hidden');
     }
+    if ($('#online-resign-confirm').open && (!activeOnline || room.status !== 'playing')) $('#online-resign-confirm').close();
     for (const id of ['create', 'join', 'quick', 'cancel', 'resign', 'resign-yes', 'draw-yes', 'draw-no', 'leave']) $('#online-' + id).disabled = busy || !connected;
   }
   async function api(route, input) {
@@ -109,6 +128,24 @@
       try { const response = await fetch('/api/state', { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' }); if (response.ok) accept(await response.json()); } catch {}
     } finally { busy = false; if (mode === 'online' && !reviewSession) renderBoard(); else render(); }
   }
+  // SSE remains the primary transport. A bounded independent read catches an
+  // update held by an intermediary or a backgrounded browser stream.
+  async function refreshState() {
+    if (!started || !token || refreshing || busy || mode !== 'online' || reviewSession || (!state.queued && !['waiting', 'playing'].includes(state.room?.status))) return;
+    refreshing = true;
+    const epoch = stateEpoch, controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch('/api/state', { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store', signal: controller.signal });
+      if (response.ok) {
+        const next = await response.json();
+        // Never let a read begun before a command/event undo that newer state.
+        if (epoch === stateEpoch && !busy) accept(next);
+      }
+    } catch {} finally { clearTimeout(timeout); refreshing = false; }
+  }
+  setInterval(refreshState, 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshState(); });
   async function streamLoop() {
     let delay = 1000;
     while (started) {
@@ -165,9 +202,10 @@
   $('#online-cancel').onclick = () => command('cancel'); $('#online-leave').onclick = () => command('leave');
   const action = value => command('action', { action: value, version: state.room?.version });
   $('#online-draw').onclick = () => action('offer-draw'); $('#online-draw-yes').onclick = () => action('accept-draw'); $('#online-draw-no').onclick = () => action('decline-draw');
-  $('#online-resign').onclick = () => $('#online-resign-confirm').classList.remove('hidden');
-  $('#online-resign-no').onclick = () => $('#online-resign-confirm').classList.add('hidden');
-  $('#online-resign-yes').onclick = () => { $('#online-resign-confirm').classList.add('hidden'); action('resign'); };
+  $('#online-draw-response').addEventListener('cancel', event => event.preventDefault());
+  $('#online-resign').onclick = () => $('#online-resign-confirm').showModal();
+  $('#online-resign-no').onclick = () => $('#online-resign-confirm').close();
+  $('#online-resign-yes').onclick = () => { $('#online-resign-confirm').close(); action('resign'); };
   async function copy(value, button) {
     try { await navigator.clipboard.writeText(value); const old = button.textContent; button.textContent = 'Copied!'; setTimeout(() => button.textContent = old, 1800); }
     catch { setError('Copy this code to invite your friend: ' + state.room.code); }

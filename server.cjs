@@ -63,13 +63,14 @@ const server = http.createServer(async (request, response) => {
     if (pathname === '/health' || pathname === '/api/health') { json(response, 200, { ok: true }); return; }
     if (pathname.startsWith('/api/')) {
       const ip = request.headers['x-real-ip'] || request.socket.remoteAddress;
-      rate('ip:' + ip, 240);
+      const stateRead = pathname === '/api/state' && request.method === 'GET';
+      rate((stateRead ? 'state-ip:' : 'ip:') + ip, stateRead ? 900 : 240);
       if (request.method === 'POST') sameOrigin(request);
       if (pathname === '/api/session' && request.method === 'POST') {
         await body(request); rate('session:' + ip, 20); json(response, 201, { token: rooms.createSession() }); return;
       }
       const { id } = rooms.session(request.headers.authorization?.replace(/^Bearer /, ''));
-      if (pathname === '/api/state' && request.method === 'GET') { json(response, 200, rooms.view(id)); return; }
+      if (stateRead) { rate('state-player:' + id, 240); json(response, 200, rooms.view(id)); return; }
       if (pathname === '/api/events' && request.method === 'GET') {
         let clients = streams.get(id); if (!clients) streams.set(id, clients = new Set());
         if (clients.size >= 3) { json(response, 429, { error: 'This guest is already connected in another window.' }); return; }

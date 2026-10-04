@@ -239,7 +239,9 @@ textarea {resize:vertical;overflow-wrap:anywhere;font-family:ui-monospace,Consol
 @media(max-width:620px){body{min-width:0;}.brand h1{font-size:clamp(1.5rem,7.6vw,2.5rem);}.mode-tabs button,.board-toolbar button{min-width:0;}}
 
 /* BoardSight checkmate presentation. */
-.checkmate-result{position:absolute;inset:0;z-index:25;display:grid;place-items:center;padding:16px;background:rgb(35 27 19 / .42);animation:checkmate-reveal .45s ease-out both;}
+.checkmate-result{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;box-sizing:border-box;z-index:25;display:grid;place-items:center;padding:16px;background:rgb(35 27 19 / .42);animation:checkmate-reveal .45s ease-out both;}
+.checkmate-result::backdrop{background:rgb(35 27 19 / .42);}
+.checkmate-result.draw-result .checkmate-loser-piece{animation:none;transform:none;}
 .checkmate-card{width:min(100%,390px);padding:24px;border:2px solid var(--brass);border-radius:14px;background:var(--panel-bg-raised);box-shadow:0 16px 45px rgb(0 0 0 / .3);text-align:center;animation:checkmate-card-enter .6s cubic-bezier(.2,.8,.2,1) both;}
 .checkmate-eyebrow{margin:0;color:var(--brass);font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.18em;}
 .checkmate-card h2{margin:4px 0 8px;font-size:clamp(1.7rem,5vw,2.5rem);}

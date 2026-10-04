@@ -10,6 +10,18 @@
 #online-room-code{display:block;font-size:1.8rem;letter-spacing:.17em;padding:8px 0 14px;font-variant-numeric:tabular-nums}
 #online-seats{white-space:pre-line;line-height:1.65}
 .online-searching{font-size:1.15rem;color:#825b17}
+#online-draw-response,#online-resign-confirm{position:fixed;inset:0;margin:auto;width:min(440px,calc(100% - 32px));max-height:80vh;overflow:auto;padding:28px;border:1px solid #b28a52;border-radius:14px;background:#fffaf0;color:#30251c;box-shadow:0 16px 60px #0006;box-sizing:border-box}
+#online-draw-response::backdrop,#online-resign-confirm::backdrop{background:#21170db3}
+#online-draw-response h2,#online-resign-confirm h2{margin:0 0 14px;font-size:1.5rem}
+#online-draw-response p,#online-resign-confirm p{line-height:1.6}
+#online-board-controls{max-width:780px;margin:8px auto 0;padding:12px;box-sizing:border-box}
+#online-board-summary{margin:0 0 10px;font-size:.88rem}
+#online-board-controls .button-pair{display:flex;gap:10px}
+#online-board-controls .button-pair button{flex:1;min-height:44px;min-width:0}
+#online-board-controls #online-leave{width:100%;min-height:44px}
+#online-board-controls #online-draw-pending{margin:10px 0 0}
+@media(max-width:900px){#online-board-controls{max-width:680px}}
+@media(max-width:620px){.online-active .brand p,.online-active .privacy-badge{display:none}.online-active .topbar{margin-bottom:8px}.online-active .brand-mark{width:32px;height:32px}.online-active .brand h1{font-size:1.6rem}.online-active .mode-tabs{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin-bottom:10px}.online-active .mode-tabs button{font-size:.75rem;min-height:48px;padding:5px 2px}.online-active .mode-tabs button:before{width:16px;height:16px;margin-bottom:3px}.online-active .board-toolbar button{font-size:.8rem;min-height:40px}.online-active .capture-row{min-height:24px;font-size:.75rem;padding:3px 8px}}
 #online-panel .control-group{margin-bottom:14px}
 #online-panel button{width:100%}
 #online-panel .button-pair button{min-width:0}

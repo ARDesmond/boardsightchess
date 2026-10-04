@@ -11,3 +11,6 @@ Attach a Railway volume at `/data`. The server uses `RAILWAY_VOLUME_MOUNT_PATH` 
 Guest credentials live in sessionStorage for this tab. Refresh reconnects; closing the tab, clearing browser storage or moving between website domains may lose access to the guest seat. There are no accounts, verified identities, ratings, spectators, chat, permanent game archives or competitive anti-cheat guarantees. Waiting rooms expire after 30 minutes; completed rooms after 24 hours; inactive games and unattached guests after seven days. A disconnected opponent's seat stays reserved. The remaining player can resign or agree a draw after reconnection. Timed games and disconnect forfeits can be added later.
 
 Room codes are invitations, not passwords: anyone with an unused code can fill the other seat. Avoid including personal information in guest nicknames. The online panel is masked for optional Clarity recordings.
+
+While a room is active, an authenticated one-second state refresh supplements live events and recovers delayed streams, including when a mobile tab returns to the foreground. Draw offers pause moves on the server until accepted or declined, with a centered decision dialog. Checkmate, resignation and agreed draws share the centered result screen. Online game controls sit directly beneath the board on mobile.
+

@@ -68,14 +68,14 @@ app.innerHTML = `
           <div id="eval-panel" class="eval-rail hidden" aria-label="Position evaluation"><span id="eval-top-side">B</span><div class="eval-track" aria-hidden="true"><div id="eval-fill"></div></div><span id="eval-bottom-side">W</span></div>
         <div class="board-wrap">
           <div id="board" class="board" role="grid" aria-label="Chess board"></div>
-          <section id="checkmate-result" class="checkmate-result hidden" aria-label="Checkmate result" aria-live="polite">
+          <dialog id="checkmate-result" class="checkmate-result hidden" aria-labelledby="checkmate-winner" aria-describedby="checkmate-loser checkmate-player">
             <div class="checkmate-card">
               <p class="checkmate-eyebrow">Checkmate</p>
               <div class="checkmate-pieces" aria-hidden="true"><img id="checkmate-winner-piece" class="checkmate-winner-piece" alt=""><img id="checkmate-loser-piece" class="checkmate-loser-piece" alt=""></div>
               <h2 id="checkmate-winner"></h2><p id="checkmate-loser"></p><p id="checkmate-player"></p>
               <button id="checkmate-review" class="primary-button">Walk through game</button><div class="button-pair"><button id="checkmate-close">View final position</button><button id="checkmate-new" class="primary-button">New game</button></div>
             </div>
-          </section>
+          </dialog>
         </div>
         </div>
         <div id="captures-bottom" class="capture-row"></div>
@@ -448,32 +448,38 @@ function makePlayerMove(from,to){attemptMove(from,to);}
 function hideCheckmateResult(){
   clearTimeout(checkmateTimer);checkmateTimer=null;checkmatePendingFen=null;
   $('#checkmate-result').classList.add('hidden');
+  if ($('#checkmate-result').open) $('#checkmate-result').close();
   boardEl.querySelectorAll('.checkmate-king').forEach(piece=>piece.classList.remove('checkmate-king'));
 }
 function syncCheckmateResult(){
   if(reviewSession){hideCheckmateResult();return;}
-  if(mode==='sandbox'||!game.isCheckmate()){
+  const result = mode === 'online' ? (onlineFinished() ? onlineController.state.room.result : null) : mode !== 'sandbox' && game.isCheckmate() ? { winner: opposite(game.turn()), reason: 'checkmate' } : null;
+  if(!result){
     hideCheckmateResult();checkmateShownFen=null;return;
   }
-  const fen=game.fen();
-  if(checkmateShownFen===fen||checkmatePendingFen===fen)return;
-  hideCheckmateResult();checkmatePendingFen=fen;
+  const fen=game.fen(), key = mode === 'online' ? onlineController.state.room.code + ':' + JSON.stringify(result) + ':' + fen : fen;
+  if(checkmateShownFen===key||checkmatePendingFen===key)return;
+  hideCheckmateResult();checkmatePendingFen=key;
   checkmateTimer=setTimeout(()=>{
     checkmateTimer=null;checkmatePendingFen=null;
-    if(mode==='sandbox'||game.fen()!==fen||!game.isCheckmate())return;
-    checkmateShownFen=fen;
-    const loser=game.turn(),winner=opposite(loser);
-    $('#checkmate-winner').textContent=colorName(winner)+' wins';
-    $('#checkmate-loser').textContent=colorName(loser)+' loses by checkmate.';
-    $('#checkmate-player').textContent=winner===playerColor?'You won. Well played!':mode==='online'?'Your opponent won. Try another game.':'Computer won. Try another game.';
-    $('#checkmate-winner-piece').src='assets/pieces/'+winner+'K.svg';
-    $('#checkmate-loser-piece').src='assets/pieces/'+loser+'K.svg';
-    for(const square of boardEl.querySelectorAll('[data-square]')){
+    if(mode==='sandbox'||reviewSession||game.fen()!==fen||(mode==='online'?!onlineFinished():!game.isCheckmate()))return;
+    checkmateShownFen=key;
+    const winner=result.winner,loser=winner?opposite(winner):null;
+    $('.checkmate-eyebrow').textContent = result.reason === 'checkmate' ? 'Checkmate' : result.reason === 'resignation' ? 'Resignation' : 'Game drawn';
+    $('#checkmate-result').classList.toggle('draw-result', !winner);
+    $('#checkmate-winner').textContent=winner?colorName(winner)+' wins':'Draw';
+    $('#checkmate-loser').textContent=winner?colorName(loser)+' loses by '+result.reason+'.':'Game ended by '+result.reason+'.';
+    $('#checkmate-player').textContent=!winner?'A shared result. Ready for another game?':winner===playerColor?'You won. Well played!':mode==='online'?'Your opponent won. Try another game.':'Computer won. Try another game.';
+    $('#checkmate-winner-piece').src='assets/pieces/'+(winner||'w')+'K.svg';
+    $('#checkmate-loser-piece').src='assets/pieces/'+(loser||'b')+'K.svg';
+    $('#checkmate-review').classList.toggle('hidden', !game.history().length);
+    if (result.reason === 'checkmate') for(const square of boardEl.querySelectorAll('[data-square]')){
       const piece=game.get(square.dataset.square);
       if(piece?.type==='k'&&piece.color===loser)square.querySelector('.piece')?.classList.add('checkmate-king');
     }
     $('#checkmate-result').classList.remove('hidden');
-  },1000);
+    if (!$('#checkmate-result').open) $('#checkmate-result').showModal();
+  },result.reason === 'checkmate' ? 1000 : 0);
 }
 function renderStatus() {
   if(reviewSession){statusEl.textContent='Review · '+(reviewSession.preview==='stronger'?'suggested alternative':reviewSession.cursor?'after '+reviewMoveName(reviewSession.data,reviewSession.cursor-1):'starting position');return;}
@@ -571,6 +577,7 @@ function takeBack() {
 
 document.querySelector('#new-game').addEventListener('click', startNewGame);
 document.querySelector('#checkmate-close').addEventListener('click',hideCheckmateResult);
+document.querySelector('#checkmate-result').addEventListener('cancel',event=>{event.preventDefault();hideCheckmateResult();});
 document.querySelector('#checkmate-new').addEventListener('click',()=>{if(mode==='online'){hideCheckmateResult();onlineController?.command('leave');return;}mode='game';for(const button of document.querySelectorAll('[data-mode]'))button.setAttribute('aria-pressed',String(button.dataset.mode===mode));$('#opening-panel').classList.add('hidden');startNewGame();});
 document.querySelector('#undo').addEventListener('click', takeBack);
 mapModeEl.addEventListener('change', renderBoard);

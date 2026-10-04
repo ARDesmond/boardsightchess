@@ -126,6 +126,7 @@ class Rooms {
   finish(room, result) { room.status = 'finished'; room.result = result; room.drawOffer = null; room.touched = this.now(); }
   move(id, { move, version } = {}) {
     const { room, color, game } = this.own(id, version);
+    if (room.drawOffer) fail('Play is paused until the draw offer is accepted or declined.');
     if (game.turn() !== color) fail('Wait for your opponent’s turn.');
     if (typeof move !== 'string' || !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)) fail('Invalid move.', 400);
     const legal = game.moves({ verbose: true }).find(m => m.from + m.to + (m.promotion || '') === move);
