@@ -511,4 +511,4 @@ class Chess {
 
 return { Chess };
 })();
-
+if (typeof module !== 'undefined' && module.exports) module.exports = { Chess };

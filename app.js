@@ -36,6 +36,9 @@ let lastMove = null;
 let playerColor = 'w';
 let computerColor = 'b';
 let isComputerThinking = false;
+let onlineController = null;
+function onlineFinished() { return mode === 'online' && onlineController?.state?.room?.status === 'finished'; }
+function onlineBlocked() { return mode === 'online' && !onlineController?.canMove(); }
 
 let holdRevealActive = false;
 let hoveredSquare = null;
@@ -52,7 +55,7 @@ app.innerHTML = `
     </header>
 
     <nav class="mode-tabs" aria-label="Training mode">
-  <button data-mode="game" aria-pressed="true">Play computer</button><button data-mode="opening" aria-pressed="false">Opening practice</button><button data-mode="sandbox" aria-pressed="false">Sandbox</button>
+  <button data-mode="game" aria-pressed="true">Play computer</button><button data-mode="online" aria-pressed="false">Online play</button><button data-mode="opening" aria-pressed="false">Opening practice</button><button data-mode="sandbox" aria-pressed="false">Sandbox</button>
   </nav><section class="main-grid">
       <div class="board-column">
         <div class="status-row">
@@ -276,9 +279,7 @@ function generateAttackMap() {
 }
 
 function overlayColor(square, attackMap) {
-  const mapMode = mapModeEl.value;
-  const visible = mapMode === 'always' || (mapMode === 'hold' && holdRevealActive);
-  if (!visible) return 'transparent';
+  if (!mapVisible()) return 'transparent';
 
   const attackers = attackMap[square];
   const mine = attackers.filter(a => a.color === playerColor).length;
@@ -356,7 +357,7 @@ function renderBoard() {
       pieceEl.className = `piece ${piece.color === 'w' ? 'white' : 'black'}`;
       pieceEl.dataset.art = piece.color + piece.type;
       pieceEl.draggable = false;
-      if (mode==='sandbox' || (piece.color===playerColor && game.turn()===playerColor)) pieceEl.classList.add('draggable-piece');
+      if (mode==='sandbox' || (!onlineBlocked() && piece.color===playerColor && game.turn()===playerColor)) pieceEl.classList.add('draggable-piece');
       pieceEl.textContent = PIECES[`${piece.color}${piece.type}`];
       pieceEl.setAttribute('aria-hidden', 'true');
       squareEl.appendChild(pieceEl);
@@ -404,6 +405,7 @@ function describeSquare(square, attackMap) {
   const mine = attackers.filter(a => a.color === playerColor).length;
   const theirs = attackers.filter(a => a.color === computerColor).length;
   const occupant = piece ? `${colorName(piece.color)} ${PIECE_NAMES[piece.type]}` : 'empty';
+  if(mode==='online'&&!onlineController?.state?.room?.sight)return `${square}, ${occupant}`;
   return `${square}, ${occupant}, your coverage ${mine}, opponent coverage ${theirs}`;
 }
 
@@ -436,7 +438,7 @@ function onSquareClick(square) {
     if(selectedSquare && selectedSquare!==square){executeMove(selectedSquare,square);return;}
     selectedSquare=game.get(square)?square:null;renderBoard();return;
   }
-  if(isComputerThinking || game.isGameOver() || game.turn()!==playerColor)return;
+  if(onlineBlocked() || isComputerThinking || game.isGameOver() || game.turn()!==playerColor)return;
   if(selectedSquare && selectedSquare!==square && legalTargets.some(m=>m.to===square)){attemptMove(selectedSquare,square);return;}
   if(game.get(square)?.color===playerColor){selectedSquare=square;legalTargets=game.moves({square,verbose:true});}else clearSelection();
   renderBoard();
@@ -463,7 +465,7 @@ function syncCheckmateResult(){
     const loser=game.turn(),winner=opposite(loser);
     $('#checkmate-winner').textContent=colorName(winner)+' wins';
     $('#checkmate-loser').textContent=colorName(loser)+' loses by checkmate.';
-    $('#checkmate-player').textContent=winner===playerColor?'You won. Well played!':'Computer won. Try another game.';
+    $('#checkmate-player').textContent=winner===playerColor?'You won. Well played!':mode==='online'?'Your opponent won. Try another game.':'Computer won. Try another game.';
     $('#checkmate-winner-piece').src='assets/pieces/'+winner+'K.svg';
     $('#checkmate-loser-piece').src='assets/pieces/'+loser+'K.svg';
     for(const square of boardEl.querySelectorAll('[data-square]')){
@@ -475,6 +477,7 @@ function syncCheckmateResult(){
 }
 function renderStatus() {
   if(reviewSession){statusEl.textContent='Review · '+(reviewSession.preview==='stronger'?'suggested alternative':reviewSession.cursor?'after '+reviewMoveName(reviewSession.data,reviewSession.cursor-1):'starting position');return;}
+  if(mode==='online'){statusEl.textContent=onlineController?.statusText()||'Connecting to online play…';return;}
   if (game.isCheckmate()) {
     statusEl.textContent = `${colorName(opposite(game.turn()))} wins by checkmate.`;
     return;
@@ -502,7 +505,7 @@ function renderStatus() {
 }
 
 function scheduleComputerMove() {
-  if(reviewSession||mode==='sandbox'||game.turn()!==computerColor||game.isGameOver()||isComputerThinking)return;
+  if(reviewSession||mode==='online'||mode==='sandbox'||game.turn()!==computerColor||game.isGameOver()||isComputerThinking)return;
   const accepted=mode==='opening'?acceptedMoves():[];
   if(mode==='opening'&&!accepted.length){renderExtras();return;}
   stopEvaluation();
@@ -523,6 +526,9 @@ function resolvePlayerColor() {
 }
 
 function startNewGame(fen) {
+  if(mode==='online'){onlineController?.enter();return;}
+  for(const button of document.querySelectorAll('[data-mode]'))button.setAttribute('aria-pressed',String(button.dataset.mode===mode));
+  document.querySelector('#opening-panel').classList.toggle('hidden',mode!=='opening');document.querySelector('#sandbox-panel').classList.toggle('hidden',mode!=='sandbox');
   if(reviewSession)closeReview(false);stopReviewSearch();
   invalidate();checkmateShownFen=null;
   customPosition=typeof fen==='string';
@@ -548,7 +554,7 @@ function startNewGame(fen) {
 }
 
 function takeBack() {
-  if(reviewSession)return;
+  if(reviewSession||mode==='online')return;
   invalidate();
   if (!game.history().length) return;
   if (playerColor !== gameStartTurn && game.history().length === 1) return;
@@ -565,7 +571,7 @@ function takeBack() {
 
 document.querySelector('#new-game').addEventListener('click', startNewGame);
 document.querySelector('#checkmate-close').addEventListener('click',hideCheckmateResult);
-document.querySelector('#checkmate-new').addEventListener('click',()=>{mode='game';for(const button of document.querySelectorAll('[data-mode]'))button.setAttribute('aria-pressed',String(button.dataset.mode===mode));$('#opening-panel').classList.add('hidden');startNewGame();});
+document.querySelector('#checkmate-new').addEventListener('click',()=>{if(mode==='online'){hideCheckmateResult();onlineController?.command('leave');return;}mode='game';for(const button of document.querySelectorAll('[data-mode]'))button.setAttribute('aria-pressed',String(button.dataset.mode===mode));$('#opening-panel').classList.add('hidden');startNewGame();});
 document.querySelector('#undo').addEventListener('click', takeBack);
 mapModeEl.addEventListener('change', renderBoard);
 
@@ -596,7 +602,7 @@ window.addEventListener('blur', () => {
 let trayChoice='move';
 const $=selector=>document.querySelector(selector);
 const uci=move=>move.from+move.to+(move.promotion||'');
-function mapVisible(){return mapModeEl.value==='always'||(mapModeEl.value==='hold'&&holdRevealActive);}
+function mapVisible(){if(mode==='online'&&!onlineController?.state?.room?.sight)return false;return mapModeEl.value==='always'||(mapModeEl.value==='hold'&&holdRevealActive);}
 function acceptedMoves(){return repertoireMoves(OPENINGS.find(o=>o.id===$('#opening').value),$('#variation').value,game.history({verbose:true}).map(uci));}
 function invalidate(){
   hideCheckmateResult();
@@ -613,16 +619,17 @@ function renderExtras(){
   $('#sight-toggle').setAttribute('aria-pressed',String(mapVisible()));
   $('#game-setup').classList.toggle('hidden',!!reviewSession||mode!=='game'||game.history().length>0);
   $('#game-setup').previousElementSibling.textContent=mode==='game'&&!reviewSession?'Game & Boardsight':'Boardsight';
-  $('#undo').classList.toggle('hidden',!!reviewSession||mode==='sandbox');
+  $('#undo').classList.toggle('hidden',!!reviewSession||mode==='online'||mode==='sandbox');
   $('#undo').disabled=!game.history().length||(playerColor!==gameStartTurn&&game.history().length===1);
   $('#new-game').classList.toggle('hidden',!!reviewSession||mode!=='game');
-  const canReview=mode==='game'&&((game.isGameOver()&&game.history().length)||reviewArchive);
+  const canReview=onlineFinished()?game.history().length:mode==='game'&&((game.isGameOver()&&game.history().length)||reviewArchive);
   $('#review-open').classList.toggle('hidden',!!reviewSession||!canReview);
-  $('#review-open').textContent=game.isGameOver()&&game.history().length?'Walk through game':'Previous game walkthrough';
-  $('.board-assistance').classList.toggle('hidden',!!reviewSession);
+  $('#review-open').textContent=(onlineFinished()||game.isGameOver())&&game.history().length?'Walk through game':'Previous game walkthrough';
+  $('.board-assistance').classList.toggle('hidden',!!reviewSession||mode==='online');
+  if(onlineController)onlineController.render();
   $('.app-shell').classList.toggle('reviewing',!!reviewSession);
   if(reviewSession)renderReview();
-  $('#game-info').textContent=reviewSession?'Reviewing '+colorName(reviewSession.data.player)+' moves':mode==='game'?`You: ${colorName(playerColor)} · Stockfish ≈ ${difficultyEl.value}${difficultyEl.value==='2200'?'+':''} Elo`:mode==='sandbox'?'Blue: White · Red: Black':'Practicing '+colorName(playerColor);
+  $('#game-info').textContent=reviewSession?'Reviewing '+colorName(reviewSession.data.player)+' moves':mode==='online'?'Guest online play · Casual · Untimed':mode==='game'?`You: ${colorName(playerColor)} · Stockfish ≈ ${difficultyEl.value}${difficultyEl.value==='2200'?'+':''} Elo`:mode==='sandbox'?'Blue: White · Red: Black':'Practicing '+colorName(playerColor);
   if(mode==='sandbox')statusEl.textContent='Sandbox · '+colorName(game.turn())+' to move';
   if(mode==='opening'){
     const moves=acceptedMoves();
@@ -648,7 +655,7 @@ function drawInspector(){
   boardEl.parentElement.appendChild(svg);
 }
 function attemptMove(from,to){
-  if(animationBusy||promotionPending||isComputerThinking)return;
+  if(onlineBlocked()||animationBusy||promotionPending||isComputerThinking)return;
   const legal=game.moves({square:from,verbose:true}).filter(m=>m.to===to);
   if(!legal.length)return;
   if(mode==='opening'&&!acceptedMoves().some(m=>m.startsWith(from+to))){releaseVisual=null;trainingMessage='That move is legal, but outside this repertoire. Try again.';renderExtras();return;}
@@ -673,6 +680,7 @@ function animatePiece(piece,from,to){
 }
 async function executeMove(from,to,promotion='q'){
   if(reviewSession||animationBusy)return;
+  if(mode==='online'){if(onlineBlocked())return;const promote=game.moves({square:from,verbose:true}).some(m=>m.to===to&&m.promotion);await onlineController.submitMove(from+to+(promote?promotion:''));return;}
   const piece=game.get(from);if(!piece)return;
   const token=generation;let move;
   if(mode==='sandbox'){
@@ -699,7 +707,7 @@ function cancelDrag(){
   drag=null;boardEl.querySelectorAll('.drop-target,.drag-origin').forEach(el=>el.classList.remove('drop-target','drag-origin'));
 }
 boardEl.addEventListener('pointerdown',event=>{
-  if(reviewSession)return;
+  if(reviewSession||onlineBlocked())return;
   if(event.button!==0||drag||animationBusy||promotionPending||$('#inspect-toggle').getAttribute('aria-pressed')==='true')return;
   const source=event.target.closest('.piece'),square=source?.closest('[data-square]')?.dataset.square,piece=square&&game.get(square);
   if(!piece || (mode!=='sandbox'&&(isComputerThinking||piece.color!==playerColor||game.turn()!==playerColor||game.isGameOver())) || (mode==='sandbox'&&trayChoice!=='move'))return;
@@ -763,10 +771,11 @@ $('#flip').onclick=()=>{invalidate();orientation=opposite(orientation);renderBoa
 $('#inspect-toggle').onclick=()=>{cancelDrag();const button=$('#inspect-toggle');button.setAttribute('aria-pressed',String(button.getAttribute('aria-pressed')!=='true'));clearSelection();renderBoard();};
 for(const button of document.querySelectorAll('[data-mode]'))button.onclick=()=>{
   if(reviewSession)closeReview(false);
+  if(mode==='online'&&button.dataset.mode!=='online'){game=new Chess();lastMove=null;gameRootFen=game.fen();customPosition=false;}
   invalidate();mode=button.dataset.mode;for(const b of document.querySelectorAll('[data-mode]'))b.setAttribute('aria-pressed',String(b===button));
   $('#opening-panel').classList.toggle('hidden',mode!=='opening');$('#sandbox-panel').classList.toggle('hidden',mode!=='sandbox');
   $('#inspect-toggle').setAttribute('aria-pressed','false');
-  if(mode==='sandbox'){$('#sandbox-play-as').value=playAsEl.value==='b'?'b':'w';$('#sandbox-difficulty').value=difficultyEl.value;playerColor='w';computerColor='b';clearSelection();syncSandbox();renderBoard();}else startNewGame();
+  if(mode==='online'){onlineController?.enter();renderBoard();}else if(mode==='sandbox'){$('#sandbox-play-as').value=playAsEl.value==='b'?'b':'w';$('#sandbox-difficulty').value=difficultyEl.value;playerColor='w';computerColor='b';clearSelection();syncSandbox();renderBoard();}else startNewGame();
 };
 for(const choice of ['move','erase',...Object.keys(PIECES)]){
   const b=document.createElement('button');b.type='button';b.textContent=PIECES[choice]||choice;if(PIECES[choice])b.dataset.art=choice;b.setAttribute('aria-label',PIECES[choice]?colorName(choice[0])+' '+PIECE_NAMES[choice[1]]:choice);b.setAttribute('aria-pressed',String(choice==='move'));
@@ -827,7 +836,7 @@ function renderAssistance(){
       row.appendChild(score);
     }
   }
-  if(reviewSession){stopEvaluation();return;}
+  if(reviewSession||mode==='online'){stopEvaluation();$('#eval-panel').classList.add('hidden');$('.board-stage').classList.remove('has-evaluation');return;}
   $('#guide-panel').classList.toggle('hidden',!guideEnabled);
   if(guideEnabled){
     const history=game.history({verbose:true}).map(uci);
@@ -947,7 +956,7 @@ function reviewTip(result){
 function stopReviewSearch(){++reviewSerial;reviewEngine.cancel();if(reviewSession)reviewSession.analyzing=false;}
 function openReview(){
   if(animationBusy||reviewSession)return;
-  const data=mode==='game'&&game.isGameOver()&&game.history().length?reviewSnapshot():reviewArchive;
+  const data=((mode==='game'&&game.isGameOver())||onlineFinished())&&game.history().length?reviewSnapshot():reviewArchive;
   if(!data)return;
   const returnState={game,mode,orientation,lastMove,customPosition,gameRootFen,gameStartTurn,playerColor,computerColor};
   stopReviewSearch();invalidate();reviewArchive=data;
