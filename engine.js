@@ -1,17 +1,42 @@
 'use strict';
 const BOT_LEVELS = [200,400,600,800,1000,1200,1400,1600,1800,2000,2200];
-// Weight evaluated candidates, while always taking the shortest proven mate.
-function selectCandidate(candidates, rating, random=Math.random) {
+// These are training presets, not measured human Elo ratings.
+// Lower levels search fewer plies and sometimes miss a tactic within a bounded
+// error budget. Ordinary moves still favor reasonable evaluated candidates.
+function difficultyProfile(rating) {
+  const presets=[
+    {rating:200,depth:4,temperature:220,ceiling:400,mistakeChance:0.60,mistakeMin:250,mistakeMax:1100},
+    {rating:400,depth:5,temperature:180,ceiling:330,mistakeChance:0.48,mistakeMin:220,mistakeMax:900},
+    {rating:600,depth:6,temperature:145,ceiling:270,mistakeChance:0.38,mistakeMin:180,mistakeMax:750},
+    {rating:800,depth:7,temperature:110,ceiling:220,mistakeChance:0.28,mistakeMin:150,mistakeMax:650},
+    {rating:1000,depth:8,temperature:85,ceiling:170,mistakeChance:0.20,mistakeMin:120,mistakeMax:500},
+    {rating:1200,depth:9,temperature:60,ceiling:120,mistakeChance:0.12,mistakeMin:90,mistakeMax:350},
+    {rating:1400,depth:10,temperature:40,ceiling:80,mistakeChance:0.04,mistakeMin:80,mistakeMax:220}
+  ];
+  const value=Math.max(200,Math.min(1400,rating));
+  const upper=presets.findIndex(p=>p.rating>=value);
+  if(upper===0)return {...presets[0]};
+  const low=presets[upper-1],high=presets[upper],fraction=(value-low.rating)/(high.rating-low.rating);
+  const result={};for(const key of Object.keys(low))result[key]=low[key]+fraction*(high[key]-low[key]);
+  result.depth=Math.round(result.depth);return result;
+}
+function weightedCandidate(candidates,weight,random) {
+  const weights=candidates.map(weight);let draw=random()*weights.reduce((a,b)=>a+b,0);
+  return (candidates.find((candidate,i)=>(draw-=weights[i])<=0)||candidates[candidates.length-1]).move;
+}
+function selectCandidate(candidates,rating,random=Math.random) {
   const sorted=candidates.slice().sort((a,b)=>b.score-a.score);
-  if(!sorted.length) return null;
-  if(sorted[0].score>=90000)return sorted[0].move;
-  const weakness=Math.max(0,Math.min(1,(1400-rating)/1200));
-  const temperature=18+weakness*210;
-  const ceiling=60+weakness*440;
-  const eligible=sorted.filter(c=>sorted[0].score-c.score<=ceiling);
-  const weights=eligible.map(c=>Math.exp((c.score-sorted[0].score)/temperature));
-  let draw=random()*weights.reduce((a,b)=>a+b,0);
-  return (eligible.find((c,i)=>(draw-=weights[i])<=0)||eligible[0]).move;
+  if(!sorted.length)return null;
+  // Preserve reliable finishing once a forced mate has been found.
+  if(Math.abs(sorted[0].score)>=90000)return sorted[0].move;
+  const profile=difficultyProfile(rating),best=sorted[0].score;
+  const mistakes=sorted.filter(c=>c.score>-90000&&best-c.score>=profile.mistakeMin&&best-c.score<=profile.mistakeMax);
+  if(random()<profile.mistakeChance&&mistakes.length){
+    const target=(profile.mistakeMin+profile.mistakeMax)/2,spread=(profile.mistakeMax-profile.mistakeMin)/2;
+    return weightedCandidate(mistakes,c=>Math.exp(-0.5*((best-c.score-target)/spread)**2),random);
+  }
+  const ordinary=sorted.filter(c=>best-c.score<=profile.ceiling);
+  return weightedCandidate(ordinary,c=>Math.exp((c.score-best)/profile.temperature),random);
 }
 // Basic king-and-major-piece mates should make progress at every difficulty.
 function isBasicMatingEndgame(fen) {
@@ -69,7 +94,7 @@ class StockfishOpponent {
         }
         if(line==='readyok'){
           worker.postMessage('position fen '+fen);
-          worker.postMessage('go movetime '+(rating>=minElo?850:650));
+          worker.postMessage('go movetime '+(rating>=minElo?850:650)+(rating<minElo&&!finishEndgame?' depth '+difficultyProfile(rating).depth:''));
         }
         const pv=line.match(/info depth (\d+).*?score (cp|mate) (-?\d+).*? pv ([a-h][1-8][a-h][1-8][qrbn]?)/);
         if(pv && !/bound/.test(line)){
