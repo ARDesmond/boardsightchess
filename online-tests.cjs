@@ -69,18 +69,19 @@ test('draw offers pause both players until declined or accepted and cannot be se
   assert.deepEqual(rooms.view(a.id).room.moves, []);
   assert.equal(rooms.view(a.id).room.version, offered.version);
   action(b, 'decline-draw'); assert.equal(rooms.view(a.id).room.drawOffer, null);
+  assert.equal(rooms.view(a.id).room.notice.text, 'Black denied the draw');
+  assert.throws(() => move(context, a, 'e2e4'), /resumes/); context.advance(2000);
   move(context, a, 'e2e4');
   action(b, 'offer-draw'); assert.throws(() => move(context, b, 'e7e5'), /paused/);
-  action(a, 'decline-draw'); move(context, b, 'e7e5');
+  action(a, 'decline-draw'); context.advance(2000); move(context, b, 'e7e5');
   action(a, 'offer-draw'); action(b, 'accept-draw');
   assert.equal(rooms.view(a.id).room.result.reason, 'draw agreement');
 });
-test('leaving requires resignation and completed rooms remain available to opponent', () => {
+test('leaving closes rooms and completed results remain available to opponent', () => {
   const context = setup(); match(context); const { rooms, a, b } = context;
-  assert.throws(() => rooms.leave(a.id), /Resign/);
   move(context, a, 'e2e4'); rooms.action(a.id, { action: 'resign', version: rooms.view(a.id).room.version });
   rooms.leave(a.id); assert.equal(rooms.view(a.id).room, null);
-  assert.equal(rooms.view(b.id).room.result.winner, 'b'); assert.deepEqual(rooms.view(b.id).room.moves, ['e2e4']);
+  assert.equal(rooms.view(b.id).room.closed, true); assert.equal(rooms.view(b.id).room.result.winner, 'b'); assert.deepEqual(rooms.view(b.id).room.moves, ['e2e4']);
 });
 test('Quickplay pairs compatible humans, never self-matches, and supports cancel', () => {
   const context = setup(), { rooms, a, b, c } = context;
@@ -109,7 +110,7 @@ test('atomic snapshot can restore guest membership, board and repetition history
 test('waiting rooms expire, completed games expire, and active games survive short disconnects', () => {
   const context = setup(); const { rooms, a, b } = context;
   rooms.newRoom(a.id); context.advance(1800001); rooms.sweep(); assert.equal(rooms.view(a.id).room, null);
-  match(context); context.advance(3600000); rooms.sweep(); assert.equal(rooms.view(b.id).room.status, 'playing');
+  match(context); context.advance(20000); rooms.sweep(); assert.equal(rooms.view(b.id).room.status, 'playing');
   rooms.action(a.id, { action: 'resign', version: rooms.view(a.id).room.version });
   context.advance(86400001); rooms.sweep(); assert.equal(rooms.view(b.id).room, null);
 });
@@ -156,3 +157,34 @@ test('leaving or joining another room invalidates rematch eligibility and pendin
   }
 });
 
+
+test('untimed activity resets only for thinking player and expires authoritatively after sixty seconds', () => {
+  const c=setup(); match(c); const {rooms,a,b}=c;
+  const action=(p,value)=>rooms.action(p.id,{action:value,version:rooms.view(p.id).room.version});
+  c.advance(30000); rooms.tick(); assert.equal(rooms.view(a.id).room.status,'playing');
+  assert.equal(rooms.view(a.id).room.idleDeadline-rooms.view(a.id).serverTime,30000);
+  assert.throws(()=>action(b,'keep-playing'),/thinking/);
+  action(a,'keep-playing'); c.advance(59999); rooms.tick(); assert.equal(rooms.view(a.id).room.status,'playing');
+  c.advance(1); assert.throws(()=>move(c,a,'e2e4'),/not in progress/);
+  assert.deepEqual(rooms.view(a.id).room.result,{winner:'b',reason:'inactivity surrender'});
+  rooms.tick(); assert.equal(rooms.view(a.id).room.idleDeadline,null);
+});
+test('moves and rematches reset inactivity; draw decisions pause it and decline resumes after two seconds', () => {
+  const c=setup(); match(c); const {rooms,a,b}=c;
+  const action=(p,value)=>rooms.action(p.id,{action:value,version:rooms.view(p.id).room.version});
+  c.advance(45000); move(c,a,'e2e4'); assert.equal(rooms.view(a.id).room.idleDeadline-rooms.view(a.id).serverTime,60000);
+  action(a,'offer-draw'); c.advance(120000); rooms.tick(); assert.equal(rooms.view(a.id).room.status,'playing');
+  action(b,'decline-draw'); assert.equal(rooms.view(a.id).room.notice.text,'Black denied the draw');
+  c.advance(1999); assert.throws(()=>move(c,b,'e7e5'),/resumes/);
+  c.advance(1); move(c,b,'e7e5'); assert.equal(rooms.view(a.id).room.notice,null);
+  action(a,'resign'); rooms.rematch(a.id,{action:'offer',version:rooms.view(a.id).room.version});
+  rooms.rematch(b.id,{action:'accept',version:rooms.view(b.id).room.version});
+  assert.equal(rooms.view(a.id).room.idleDeadline-rooms.view(a.id).serverTime,60000);
+});
+test('leaving active game closes room, awards remaining player and prevents rematches and joins', () => {
+  const c=setup(); const code=match(c); const {rooms,a,b}=c;
+  rooms.leave(a.id); const room=rooms.view(b.id).room;
+  assert.equal(room.closed,true); assert.deepEqual(room.result,{winner:'b',reason:'opponent left'});
+  assert.throws(()=>rooms.rematch(b.id,{action:'offer',version:room.version}),/left/);
+  assert.throws(()=>rooms.join(c.c.id,{code}),/full/);
+});

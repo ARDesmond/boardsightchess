@@ -17,3 +17,6 @@ While a room is active, an authenticated one-second state refresh supplements li
 
 After a game, either player can request a rematch from the result screen or the controls beneath the board. The opponent accepts or declines in a centered dialog. Acceptance resets the board, swaps colors and preserves the room code and Boardsight setting. Pending requests can be cancelled; leaving makes a rematch unavailable.
 
+
+Untimed online games use an engagement check: after 30 seconds on a turn, the thinking player sees a 30-second surrender countdown. Still here - keep playing resets the 30-second inactivity window and countdown; a legal move resets it for the next player. The server enforces expiry, including during disconnections. Draw offers pause this timer; declining shows the denying color for two seconds and then resumes play. Leaving closes the room and clears rematch requests; a closed result remains available for review. Rematch requests show a centered notification and an unread tab-title indicator.
+

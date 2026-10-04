@@ -30,3 +30,5 @@
 @media(max-width:680px){.mode-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 #online-rematch-response{position:fixed;inset:0;margin:auto;width:min(440px,calc(100% - 32px));max-height:80vh;overflow:auto;padding:28px;border:1px solid #b28a52;border-radius:14px;background:#fffaf0;color:#30251c;box-sizing:border-box}#online-rematch-response::backdrop{background:#21170db3}#online-rematch-response p{line-height:1.6}#online-rematch-controls button{width:100%;min-height:44px}#online-rematch-status,#checkmate-rematch-status{font-size:.88rem}#checkmate-rematch{margin-bottom:10px}
+
+#online-idle,#online-notice{position:fixed;inset:0;margin:auto;width:min(440px,calc(100% - 32px));max-height:80vh;overflow:auto;padding:28px;border:1px solid #b28a52;border-radius:14px;background:#fffaf0;color:#30251c;box-sizing:border-box}#online-idle::backdrop,#online-notice::backdrop{background:#21170db3}#online-still-here{width:100%;min-height:44px}#online-idle-countdown{line-height:1.6}#online-idle-status{font-weight:bold;color:#8c2e22}

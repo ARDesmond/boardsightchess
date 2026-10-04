@@ -466,10 +466,10 @@ function syncCheckmateResult(){
     if(mode==='sandbox'||reviewSession||game.fen()!==fen||(mode==='online'?!onlineFinished():!game.isCheckmate()))return;
     checkmateShownFen=key;
     const winner=result.winner,loser=winner?opposite(winner):null;
-    $('.checkmate-eyebrow').textContent = result.reason === 'checkmate' ? 'Checkmate' : result.reason === 'resignation' ? 'Resignation' : 'Game drawn';
+    $('.checkmate-eyebrow').textContent = result.reason === 'checkmate' ? 'Checkmate' : result.reason === 'resignation' ? 'Resignation' : result.reason === 'inactivity surrender' ? 'Inactivity surrender' : winner ? 'Game over' : 'Game drawn';
     $('#checkmate-result').classList.toggle('draw-result', !winner);
     $('#checkmate-winner').textContent=winner?colorName(winner)+' wins':'Draw';
-    $('#checkmate-loser').textContent=winner?colorName(loser)+' loses by '+result.reason+'.':'Game ended by '+result.reason+'.';
+    $('#checkmate-loser').textContent=winner?(result.reason === 'opponent left' ? colorName(loser)+' left the room.' : result.reason === 'inactivity surrender' ? colorName(loser)+' surrendered after inactivity.' : colorName(loser)+' loses by '+result.reason+'.'):'Game ended by '+result.reason+'.';
     $('#checkmate-player').textContent=!winner?'A shared result. Ready for another game?':winner===playerColor?'You won. Well played!':mode==='online'?'Your opponent won. Try another game.':'Computer won. Try another game.';
     $('#checkmate-winner-piece').src='assets/pieces/'+(winner||'w')+'K.svg';
     $('#checkmate-loser-piece').src='assets/pieces/'+(loser||'b')+'K.svg';

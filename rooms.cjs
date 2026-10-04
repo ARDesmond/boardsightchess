@@ -12,7 +12,7 @@ class Rooms {
     this.sessions = new Map(snapshot?.sessions || []);
     this.rooms = new Map(snapshot?.rooms || []);
     this.games = new Map(); this.queue = new Map(); this.connections = new Map();
-    for (const room of this.rooms.values()) this.game(room);
+    for (const room of this.rooms.values()) { this.game(room); if (room.status === 'playing' && !room.idleDeadline) room.idleDeadline = this.now() + 60000; }
     this.sweep();
   }
   persist() { this.save({ schema: 1, sessions: [...this.sessions], rooms: [...this.rooms] }); }
@@ -50,11 +50,12 @@ class Rooms {
   view(id) {
     const session = this.sessions.get(id), room = this.rooms.get(session?.room);
     if (!session) fail('Guest session expired.', 401);
-    if (!room) return { room: null, queued: this.queue.has(id), name: session.name };
+    if (!room) return { room: null, queued: this.queue.has(id), name: session.name, serverTime: this.now() };
     const color = room.players.w === id ? 'w' : 'b', other = color === 'w' ? 'b' : 'w';
     return {
-      queued: false, name: session.name,
+      queued: false, name: session.name, serverTime: this.now(),
       room: { code: room.code, kind: room.kind, sight: room.sight, status: room.status,
+        closed: !!room.closed, notice: room.notice || null, resumeAt: room.resumeAt || null, idleDeadline: room.drawOffer ? null : room.idleDeadline || null, turn: this.game(room).turn(),
         version: room.version, moves: [...room.moves], fen: this.game(room).fen(),
         yourColor: color, white: room.names.w, black: room.names.b || 'Waiting for opponent',
         opponentConnected: !!room.players[other] && this.connected(room.players[other]),
@@ -76,7 +77,7 @@ class Rooms {
   available(id) {
     const old = this.rooms.get(this.sessions.get(id).room);
     if (old && old.status !== 'finished') fail('Finish or leave your current room first.');
-    if (old?.rematchOffer) { old.rematchOffer = null; ++old.version; this.notify(id); }
+    if (old) { old.closed = true; old.rematchOffer = null; ++old.version; }
     this.sessions.get(id).room = null; if (old) this.notifyRoom(old); this.queue.delete(id);
   }
   newRoom(id, { name, color = 'random', sight = true, kind = 'private' } = {}) {
@@ -102,7 +103,7 @@ class Rooms {
     this.available(id); this.name(id, name);
     const color = room.players.w ? 'b' : 'w';
     room.players[color] = id; room.names[color] = this.sessions.get(id).name;
-    this.sessions.get(id).room = code; room.status = 'playing'; room.touched = this.now(); ++room.version;
+    this.sessions.get(id).room = code; room.status = 'playing'; room.idleDeadline = this.now() + 60000; room.touched = this.now(); ++room.version;
     this.persist(); this.notify(id); return this.view(id);
   }
   quickplay(id, { name, sight = true } = {}) {
@@ -122,19 +123,21 @@ class Rooms {
   own(id, version) {
     const room = this.rooms.get(this.sessions.get(id)?.room);
     if (!room || !Object.values(room.players).includes(id)) fail('Join a room first.', 403);
+    this.expireIdle(room);
     if (room.status !== 'playing') fail('This game is not in progress.');
     if (!Number.isInteger(version) || room.version !== version) fail('The board changed. Please try your move again.');
     return { room, color: room.players.w === id ? 'w' : 'b', game: this.game(room) };
   }
-  finish(room, result) { room.status = 'finished'; room.result = result; room.drawOffer = null; room.touched = this.now(); }
+  finish(room, result) { room.status = 'finished'; room.result = result; room.drawOffer = null; room.idleDeadline = null; room.resumeAt = null; room.notice = null; room.touched = this.now(); }
   move(id, { move, version } = {}) {
     const { room, color, game } = this.own(id, version);
+    if (room.resumeAt && this.now() < room.resumeAt) fail('Play resumes after the draw response notification.');
     if (room.drawOffer) fail('Play is paused until the draw offer is accepted or declined.');
     if (game.turn() !== color) fail('Wait for your opponent’s turn.');
     if (typeof move !== 'string' || !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)) fail('Invalid move.', 400);
     const legal = game.moves({ verbose: true }).find(m => m.from + m.to + (m.promotion || '') === move);
     if (!legal) fail('That move is not legal.', 400);
-    game.move(move); room.moves.push(move); room.drawOffer = null; room.touched = this.now(); ++room.version;
+    game.move(move); room.idleDeadline = this.now() + 60000; room.notice = null; room.resumeAt = null; room.moves.push(move); room.drawOffer = null; room.touched = this.now(); ++room.version;
     if (game.isCheckmate()) this.finish(room, { winner: color, reason: 'checkmate' });
     else if (game.isDraw()) this.finish(room, { winner: null, reason: game.isStalemate() ? 'stalemate' : game.isThreefoldRepetition() ? 'threefold repetition' : game.isInsufficientMaterial() ? 'insufficient material' : 'fifty-move rule' });
     this.persist(); this.notify(id); return this.view(id);
@@ -142,13 +145,17 @@ class Rooms {
   action(id, { action, version } = {}) {
     const { room, color } = this.own(id, version);
     if (action === 'resign') this.finish(room, { winner: color === 'w' ? 'b' : 'w', reason: 'resignation' });
-    else if (action === 'offer-draw') {
-      if (room.drawOffer) fail('A draw offer is already pending.'); room.drawOffer = color;
+    else if (action === 'keep-playing') {
+      if (room.drawOffer || (room.resumeAt && this.now() < room.resumeAt)) fail('Play is paused.');
+      if (this.game(room).turn() !== color) fail('Only the thinking player can reset the timer.');
+      room.idleDeadline = this.now() + 60000;
+    } else if (action === 'offer-draw') {
+      if (room.drawOffer) fail('A draw offer is already pending.'); room.drawOffer = color; room.notice = null; room.resumeAt = null;
     } else if (action === 'accept-draw') {
       if (!room.drawOffer || room.drawOffer === color) fail('No opponent draw offer to accept.');
       this.finish(room, { winner: null, reason: 'draw agreement' });
     } else if (action === 'decline-draw') {
-      if (!room.drawOffer || room.drawOffer === color) fail('No opponent draw offer to decline.'); room.drawOffer = null;
+      if (!room.drawOffer || room.drawOffer === color) fail('No opponent draw offer to decline.'); room.drawOffer = null; room.resumeAt = this.now() + 2000; room.idleDeadline = room.resumeAt + 60000; room.notice = { text: (color === 'w' ? 'White' : 'Black') + ' denied the draw', until: room.resumeAt };
     } else fail('Unknown game action.', 400);
     ++room.version; room.touched = this.now(); this.persist(); this.notify(id); return this.view(id);
   }
@@ -158,7 +165,7 @@ class Rooms {
     if (room.status !== 'finished') fail('Finish this game before requesting a rematch.');
     if (!Number.isInteger(version) || version !== room.version) fail('The room changed. Please try again.');
     const color = room.players.w === id ? 'w' : 'b', other = color === 'w' ? 'b' : 'w';
-    if (!room.players[other] || this.sessions.get(room.players[other])?.room !== room.code) fail('Your opponent has left. Create a new room to play again.');
+    if (room.closed || !room.players[other] || this.sessions.get(room.players[other])?.room !== room.code) fail('Your opponent has left. Create a new room to play again.');
     if (action === 'offer') {
       if (room.rematchOffer) fail('A rematch request is already pending.');
       room.rematchOffer = color;
@@ -167,7 +174,7 @@ class Rooms {
       [room.players.w, room.players.b] = [room.players.b, room.players.w];
       [room.names.w, room.names.b] = [room.names.b, room.names.w];
       room.moves = []; room.result = null; room.drawOffer = null; room.rematchOffer = null;
-      room.status = 'playing'; room.round = (room.round || 1) + 1;
+      room.status = 'playing'; room.idleDeadline = this.now() + 60000; room.notice = null; room.resumeAt = null; room.round = (room.round || 1) + 1;
       this.games.set(room.code, new Chess());
     } else if (action === 'decline' || action === 'cancel') {
       if (!room.rematchOffer || (action === 'cancel' ? room.rematchOffer !== color : room.rematchOffer === color)) fail('No rematch request to respond to.');
@@ -177,12 +184,19 @@ class Rooms {
   }
   leave(id) {
     const session = this.sessions.get(id), room = this.rooms.get(session.room);
-    if (room?.status === 'playing') fail('Resign before leaving a game in progress.');
+    if (room?.status === 'playing') this.finish(room, { winner: room.players.w === id ? 'b' : 'w', reason: 'opponent left' });
+    if (room) { room.closed = true; room.rematchOffer = null; ++room.version; }
     if (room?.status === 'waiting') { this.rooms.delete(room.code); this.games.delete(room.code); }
     if (room?.rematchOffer) { room.rematchOffer = null; ++room.version; }
     session.room = null; if (room) this.notifyRoom(room); this.queue.delete(id); session.touched = this.now();
     this.persist(); this.emit(id); return this.view(id);
   }
+  expireIdle(room) {
+    if (room.status !== 'playing' || room.drawOffer || !room.idleDeadline || this.now() < room.idleDeadline) return false;
+    this.finish(room, { winner: this.game(room).turn() === 'w' ? 'b' : 'w', reason: 'inactivity surrender' });
+    ++room.version; this.persist(); this.notifyRoom(room); return true;
+  }
+  tick() { for (const room of this.rooms.values()) this.expireIdle(room); }
   sweep() {
     const now = this.now();
     for (const [code, room] of this.rooms) {

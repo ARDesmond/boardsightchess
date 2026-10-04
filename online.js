@@ -29,7 +29,7 @@
       <dialog id="online-resign-confirm" aria-labelledby="online-resign-title"><h2 id="online-resign-title">Resign this game?</h2><p>Your opponent will win.</p><div class="button-pair"><button id="online-resign-yes">Yes, resign</button><button id="online-resign-no">Keep playing</button></div></dialog>
       <dialog id="online-draw-response" aria-labelledby="online-draw-title"><h2 id="online-draw-title">Your opponent offered a draw</h2><p>Play is paused. Accept to end this game in a draw, or decline to continue playing.</p><div class="button-pair"><button id="online-draw-yes" class="primary-button">Accept draw</button><button id="online-draw-no">Decline</button></div><p id="online-draw-connection" class="tip" role="status"></p></dialog>
       <p id="online-draw-pending" class="tip hidden">Draw offered. Play is paused until your opponent accepts or declines.</p>
-      <div id="online-rematch-controls" class="hidden"><button id="online-rematch" class="primary-button">Rematch</button><p id="online-rematch-status" role="status"></p></div><dialog id="online-rematch-response" aria-labelledby="online-rematch-title"><h2 id="online-rematch-title">Play again?</h2><p>Your opponent requested a rematch. You will swap colors and keep the same room and Boardsight setting.</p><div class="button-pair"><button id="online-rematch-yes" class="primary-button">Accept rematch</button><button id="online-rematch-no">Decline rematch</button></div></dialog><button id="online-leave">Back to lobby</button>
+      <div id="online-rematch-controls" class="hidden"><button id="online-rematch" class="primary-button">Rematch</button><p id="online-rematch-status" role="status"></p></div><dialog id="online-rematch-response" aria-labelledby="online-rematch-title"><h2 id="online-rematch-title">Rematch request</h2><p>Your opponent requested a rematch. You will swap colors and keep the same room and Boardsight setting.</p><div class="button-pair"><button id="online-rematch-yes" class="primary-button">Accept rematch</button><button id="online-rematch-no">Decline rematch</button></div></dialog><dialog id="online-notice" aria-labelledby="online-notice-title"><h2 id="online-notice-title"></h2><p>Play resumes in two seconds.</p></dialog><dialog id="online-idle" aria-labelledby="online-idle-title"><h2 id="online-idle-title">Are you still playing?</h2><p id="online-idle-countdown" role="status" aria-live="polite"></p><button id="online-still-here" class="primary-button">Still here - keep playing</button></dialog><p id="online-idle-status" role="status" class="hidden"></p><button id="online-leave">Back to lobby</button>
       <p class="tip">Refresh this tab to reconnect. Closing it may lose your guest seat. Replays and tips unlock after the game ends.</p>
     </div>`;
   $('.side-panel').prepend(panel);
@@ -38,14 +38,17 @@
   boardControls.setAttribute('aria-label', 'Online game controls');
   boardControls.setAttribute('data-clarity-mask', 'true');
   boardControls.innerHTML = '<p id="online-board-summary" role="status"></p>';
-  for (const id of ['online-game-actions', 'online-draw-pending', 'online-rematch-controls', 'online-leave']) boardControls.append($('#' + id));
+  for (const id of ['online-game-actions', 'online-draw-pending', 'online-rematch-controls', 'online-idle-status', 'online-leave']) boardControls.append($('#' + id));
   $('.board-stage').after(boardControls);
   let token = null;
   try { token = sessionStorage.getItem('boardsight-guest'); $('#online-name').value = sessionStorage.getItem('boardsight-nickname') || ''; } catch {}
   let started = false, connected = false, busy = false, state = { room: null, queued: false }, displayKey = null;
-  let stateEpoch = 0, refreshing = false;
+  let stateEpoch = 0, refreshing = false, timeOffset = 0;
+  const originalTitle = document.title;
+  const serverNow = () => Date.now() + timeOffset;
   const setError = message => { $('#online-error').textContent = message || ''; $('#online-error').classList.toggle('hidden', !message); };
   function accept(next) {
+    if (next.serverTime) { timeOffset = next.serverTime - Date.now(); delete next.serverTime; }
     if (next.room && state.room?.code === next.room.code && next.room.version < state.room.version) return;
     if (JSON.stringify(next) === JSON.stringify(state)) return;
     state = next;
@@ -66,7 +69,7 @@
     }
     renderBoard();
   }
-  function canMove() { return connected && !busy && state.room?.status === 'playing' && !state.room.drawOffer && game.turn() === state.room.yourColor; }
+  function canMove() { return connected && !busy && state.room?.status === 'playing' && !state.room.drawOffer && !(state.room.resumeAt > serverNow()) && game.turn() === state.room.yourColor; }
   function statusText() {
     const room = state.room;
     if (room?.status === 'finished') return room.result.winner ? colorName(room.result.winner) + ' wins by ' + room.result.reason + '.' : 'Draw by ' + room.result.reason + '.';
@@ -74,6 +77,7 @@
     if (state.queued) return 'Quickplay · Looking for an opponent';
     if (!room) return 'Online play · Create a room, join, or find an opponent';
     if (room.status === 'waiting') return 'Room ' + room.code + ' · Waiting for a friend';
+    if (room.resumeAt > serverNow()) return room.notice?.text || 'Play paused';
     if (room.drawOffer) return 'Play paused · Waiting for the draw decision';
     return colorName(game.turn()) + ' to move' + (game.inCheck() ? ' — check!' : '') + (game.turn() === room.yourColor ? ' · Your turn' : ' · Opponent’s turn');
   }
@@ -84,10 +88,12 @@
     boardControls.classList.toggle('hidden', !activeOnline);
     $('.app-shell').classList.toggle('online-active', activeOnline);
     $('#online-board-summary').textContent = room ? 'You play ' + colorName(room.yourColor) + ' · ' + (room.status === 'waiting' ? 'Waiting for a friend' : room.status === 'finished' ? statusText() : room.drawOffer ? 'Play paused for draw decision' : room.opponentConnected ? 'Opponent connected' : 'Opponent reconnecting') : '';
+    renderTimers();
     const finished = activeOnline && room.status === 'finished';
     const pending = finished && !!room.rematchOffer;
+    document.title = pending && room.rematchOffer !== room.yourColor ? '(1) Rematch request - Boardsight Chess' : originalTitle;
     const ownRequest = pending && room.rematchOffer === room.yourColor;
-    const rematchText = !room?.opponentAvailable ? 'Your opponent has left the room.' : ownRequest ? 'Rematch requested. Waiting for your opponent.' : pending ? 'Your opponent requested a rematch.' : 'Play again with colors swapped.';
+    const rematchText = !room?.opponentAvailable ? 'Room closed. Your opponent has left.' : ownRequest ? 'Rematch requested. Waiting for your opponent.' : pending ? 'Your opponent requested a rematch.' : 'Play again with colors swapped.';
     $('#online-rematch-controls').classList.toggle('hidden', !finished);
     for (const selector of ['#online-rematch', '#checkmate-rematch']) {
       const button = $(selector); button.classList.toggle('hidden', !finished);
@@ -117,16 +123,34 @@
       $('#online-room-code').textContent = room.code;
       $('#online-seats').textContent = 'White: ' + (room.white || 'Waiting for opponent') + ' · Black: ' + (room.black || 'Waiting for opponent') + '\nYou play ' + colorName(room.yourColor) + '.';
       $('#online-rules').textContent = (room.sight ? 'Boardsight allowed for both players' : 'Classic chess · Boardsight off') + ' · Untimed · No rating changes';
-      $('#online-presence').textContent = room.status === 'waiting' ? 'Share this code or invite link with your friend.' : room.status === 'finished' ? statusText() : room.opponentConnected ? 'Opponent connected' : 'Opponent disconnected. Their seat stays reserved so they can reconnect.';
+      $('#online-presence').textContent = room.status === 'waiting' ? 'Share this code or invite link with your friend.' : room.closed ? 'Room closed. Your opponent left.' : room.status === 'finished' ? statusText() : room.opponentConnected ? 'Opponent connected' : 'Opponent disconnected. Their seat stays reserved so they can reconnect.';
       $('#online-game-actions').classList.toggle('hidden', room.status !== 'playing');
-      $('#online-leave').classList.toggle('hidden', room.status === 'playing');
-      $('#online-leave').textContent = room.status === 'waiting' ? 'Cancel room' : 'Back to lobby';
+      $('#online-leave').classList.remove('hidden');
+      $('#online-leave').textContent = room.status === 'waiting' ? 'Cancel room' : room.status === 'playing' ? 'Leave room' : 'Back to lobby';
       $('#online-draw-pending').classList.toggle('hidden', room.drawOffer !== room.yourColor);
       $('#online-draw').disabled = !!room.drawOffer || busy || !connected;
     }
     if ($('#online-resign-confirm').open && (!activeOnline || room.status !== 'playing')) $('#online-resign-confirm').close();
-    for (const id of ['create', 'join', 'quick', 'cancel', 'resign', 'resign-yes', 'draw-yes', 'draw-no', 'leave', 'rematch-yes', 'rematch-no']) $('#online-' + id).disabled = busy || !connected;
+    for (const id of ['create', 'join', 'quick', 'cancel', 'resign', 'resign-yes', 'draw-yes', 'draw-no', 'leave', 'rematch-yes', 'rematch-no', 'still-here']) $('#online-' + id).disabled = busy || !connected;
   }
+  function renderTimers() {
+    const room = state.room, active = mode === 'online' && !reviewSession && room?.status === 'playing';
+    const now = serverNow(), notice = $('#online-notice'), idle = $('#online-idle');
+    const showNotice = active && room.notice && room.notice.until > now;
+    if (showNotice) { $('#online-notice-title').textContent = room.notice.text; if (!notice.open) notice.showModal(); }
+    else if (notice.open) { notice.close(); renderStatus(); }
+    const remaining = active && !room.drawOffer && room.idleDeadline ? Math.max(0, Math.ceil((room.idleDeadline - now) / 1000)) : null;
+    const warning = remaining !== null && remaining <= 30;
+    $('#online-idle-status').classList.toggle('hidden', !warning);
+    $('#online-idle-status').textContent = warning ? (room.turn === room.yourColor ? 'Confirm you are still playing' : colorName(room.turn) + ' must move or confirm activity') + ' - ' + remaining + 's until surrender' : '';
+    const showIdle = warning && room.turn === room.yourColor && !showNotice && !$('#online-resign-confirm').open;
+    if (showIdle) { $('#online-idle-countdown').textContent = 'No move for 30 seconds. You will surrender in ' + remaining + ' seconds unless you confirm you are still here.'; if (!idle.open) idle.showModal(); }
+    else if (idle.open) idle.close();
+    $('#online-still-here').disabled = busy || !connected;
+  }
+  setInterval(renderTimers, 250);
+  $('#online-idle').addEventListener('cancel', event => event.preventDefault());
+  $('#online-notice').addEventListener('cancel', event => event.preventDefault());
   async function api(route, input) {
     const response = await fetch('/api/' + route, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: JSON.stringify(input || {}), cache: 'no-store' });
     const value = await response.json();
@@ -213,13 +237,14 @@
   $('#online-join').onclick = () => command('join', { code: $('#online-code').value, name: nickname() });
   $('#online-code').addEventListener('keydown', event => { if (event.key === 'Enter') $('#online-join').click(); });
   $('#online-quick').onclick = () => command('quickplay', preferences());
-  $('#online-cancel').onclick = () => command('cancel'); $('#online-leave').onclick = () => command('leave');
+  $('#online-cancel').onclick = () => command('cancel'); $('#online-leave').onclick = () => { if (state.room?.status === 'playing') { $('#online-resign-title').textContent = 'Leave this room?'; $('#online-resign-confirm p').textContent = 'Your opponent will win and this room will close.'; $('#online-resign-confirm').dataset.leaving = 'true'; $('#online-resign-yes').textContent = 'Leave room'; $('#online-resign-confirm').showModal(); } else command('leave'); };
+  $('#online-still-here').onclick = () => action('keep-playing');
   const action = value => command('action', { action: value, version: state.room?.version });
   $('#online-draw').onclick = () => action('offer-draw'); $('#online-draw-yes').onclick = () => action('accept-draw'); $('#online-draw-no').onclick = () => action('decline-draw');
   $('#online-draw-response').addEventListener('cancel', event => event.preventDefault());
-  $('#online-resign').onclick = () => $('#online-resign-confirm').showModal();
+  $('#online-resign').onclick = () => { $('#online-resign-title').textContent = 'Resign this game?'; $('#online-resign-confirm p').textContent = 'Your opponent will win.'; $('#online-resign-confirm').dataset.leaving = ''; $('#online-resign-yes').textContent = 'Yes, resign'; $('#online-resign-confirm').showModal(); };
   $('#online-resign-no').onclick = () => $('#online-resign-confirm').close();
-  $('#online-resign-yes').onclick = () => { $('#online-resign-confirm').close(); action('resign'); };
+  $('#online-resign-yes').onclick = () => { $('#online-resign-confirm').close(); if ($('#online-resign-confirm').dataset.leaving) command('leave'); else action('resign'); };
   function requestRematch() {
     hideCheckmateResult();
     if (state.room?.rematchOffer && state.room.rematchOffer !== state.room.yourColor) { render(); return; }

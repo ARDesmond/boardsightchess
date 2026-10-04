@@ -110,6 +110,7 @@ const server = http.createServer(async (request, response) => {
   }
 });
 server.requestTimeout = 15000;
+setInterval(() => rooms.tick(), 1000).unref();
 setInterval(() => { rooms.sweep(); rooms.persist(); const now = Date.now(); for (const [key, value] of buckets) if (now - value.start > 120000) buckets.delete(key); }, 60000).unref();
 server.listen(Number(process.env.PORT || 8080), '0.0.0.0', () => console.log('BoardSight online server ready'));
 process.on('SIGTERM', () => { rooms.persist(); for (const clients of streams.values()) for (const response of clients) response.end(); server.close(() => process.exit(0)); });
