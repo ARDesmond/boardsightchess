@@ -73,7 +73,7 @@ app.innerHTML = `
               <p class="checkmate-eyebrow">Checkmate</p>
               <div class="checkmate-pieces" aria-hidden="true"><img id="checkmate-winner-piece" class="checkmate-winner-piece" alt=""><img id="checkmate-loser-piece" class="checkmate-loser-piece" alt=""></div>
               <h2 id="checkmate-winner"></h2><p id="checkmate-loser"></p><p id="checkmate-player"></p>
-              <button id="checkmate-review" class="primary-button">Walk through game</button><div class="button-pair"><button id="checkmate-close">View final position</button><button id="checkmate-new" class="primary-button">New game</button></div>
+              <button id="checkmate-rematch" class="primary-button hidden">Rematch</button><p id="checkmate-rematch-status" role="status" class="hidden"></p><button id="checkmate-review" class="primary-button">Walk through game</button><div class="button-pair"><button id="checkmate-close">View final position</button><button id="checkmate-new" class="primary-button">New game</button></div>
             </div>
           </dialog>
         </div>
@@ -452,6 +452,7 @@ function hideCheckmateResult(){
   boardEl.querySelectorAll('.checkmate-king').forEach(piece=>piece.classList.remove('checkmate-king'));
 }
 function syncCheckmateResult(){
+  if(mode === 'online' && onlineController?.state.room?.rematchOffer && onlineController.state.room.rematchOffer !== onlineController.state.room.yourColor){hideCheckmateResult();return;}
   if(reviewSession){hideCheckmateResult();return;}
   const result = mode === 'online' ? (onlineFinished() ? onlineController.state.room.result : null) : mode !== 'sandbox' && game.isCheckmate() ? { winner: opposite(game.turn()), reason: 'checkmate' } : null;
   if(!result){
@@ -576,6 +577,7 @@ function takeBack() {
 }
 
 document.querySelector('#new-game').addEventListener('click', startNewGame);
+document.querySelector('#checkmate-rematch').addEventListener('click',()=>onlineController?.requestRematch());
 document.querySelector('#checkmate-close').addEventListener('click',hideCheckmateResult);
 document.querySelector('#checkmate-result').addEventListener('cancel',event=>{event.preventDefault();hideCheckmateResult();});
 document.querySelector('#checkmate-new').addEventListener('click',()=>{if(mode==='online'){hideCheckmateResult();onlineController?.command('leave');return;}mode='game';for(const button of document.querySelectorAll('[data-mode]'))button.setAttribute('aria-pressed',String(button.dataset.mode===mode));$('#opening-panel').classList.add('hidden');startNewGame();});
@@ -1065,3 +1067,4 @@ $('#review-retry-position').onclick=()=>{
 };
 
 startNewGame();
+

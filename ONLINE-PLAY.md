@@ -14,3 +14,6 @@ Room codes are invitations, not passwords: anyone with an unused code can fill t
 
 While a room is active, an authenticated one-second state refresh supplements live events and recovers delayed streams, including when a mobile tab returns to the foreground. Draw offers pause moves on the server until accepted or declined, with a centered decision dialog. Checkmate, resignation and agreed draws share the centered result screen. Online game controls sit directly beneath the board on mobile.
 
+
+After a game, either player can request a rematch from the result screen or the controls beneath the board. The opponent accepts or declines in a centered dialog. Acceptance resets the board, swaps colors and preserves the room code and Boardsight setting. Pending requests can be cancelled; leaving makes a rematch unavailable.
+

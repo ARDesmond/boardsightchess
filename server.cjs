@@ -82,7 +82,7 @@ const server = http.createServer(async (request, response) => {
       }
       if (request.method !== 'POST') { json(response, 404, { error: 'Endpoint not found.' }); return; }
       rate('player:' + id, 90); const input = await body(request);
-      const handlers = { '/api/create': 'newRoom', '/api/join': 'join', '/api/quickplay': 'quickplay', '/api/cancel': 'cancel', '/api/move': 'move', '/api/action': 'action', '/api/leave': 'leave' };
+      const handlers = { '/api/create': 'newRoom', '/api/join': 'join', '/api/quickplay': 'quickplay', '/api/cancel': 'cancel', '/api/move': 'move', '/api/action': 'action', '/api/leave': 'leave', '/api/rematch': 'rematch' };
       const handler = handlers[pathname]; if (!handler) { json(response, 404, { error: 'Endpoint not found.' }); return; }
       json(response, 200, rooms[handler](id, input)); return;
     }

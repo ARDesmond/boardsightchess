@@ -119,3 +119,40 @@ test('castling and promotion must match legal moves exactly', () => {
   assert.match(context.rooms.view(context.a.id).room.fen.split(' ')[0], /RNBQ1RK1/);
   assert.throws(() => move(context, context.b, 'a7a6q'), /not legal/);
 });
+test('rematch requires mutual consent, swaps seats and resets game with increasing versions', () => {
+  const c = setup(), code = match(c, false), { rooms, a, b } = c;
+  const rematch = (player, action, version = rooms.view(player.id).room.version) => rooms.rematch(player.id, { action, version });
+  assert.throws(() => rematch(a, 'offer'), /Finish/);
+  move(c, a, 'e2e4');
+  rooms.action(b.id, { action: 'resign', version: rooms.view(b.id).room.version });
+  const endVersion = rooms.view(a.id).room.version;
+  rematch(a, 'offer');
+  assert.throws(() => rematch(a, 'accept'), /opponent/);
+  assert.throws(() => rematch(b, 'accept', endVersion), /changed/);
+  rematch(b, 'decline'); assert.equal(rooms.view(a.id).room.rematchOffer, null);
+  rematch(b, 'offer'); rematch(b, 'cancel');
+  rematch(a, 'offer');
+  const restored = new Rooms({ snapshot: c.snapshot(), now: () => 1000000 });
+  assert.equal(restored.view(b.id).room.rematchOffer, 'w');
+  rematch(b, 'accept');
+  const fresh = rooms.view(a.id).room;
+  assert.equal(fresh.code, code); assert.equal(fresh.sight, false); assert.equal(fresh.round, 2);
+  assert.equal(fresh.yourColor, 'b'); assert.equal(fresh.white, 'Bob'); assert.equal(fresh.black, 'Alice');
+  assert.equal(fresh.status, 'playing'); assert.equal(fresh.result, null); assert.deepEqual(fresh.moves, []);
+  assert.ok(fresh.version > endVersion); assert.equal(rooms.game(rooms.rooms.get(code)).history().length, 0);
+  assert.throws(() => rematch(b, 'accept'), /Finish/);
+  assert.throws(() => move(c, a, 'e7e5'), /turn/);
+  move(c, b, 'e2e4'); move(c, a, 'e7e5');
+});
+test('leaving or joining another room invalidates rematch eligibility and pending requests', () => {
+  for (const leaveBy of ['leave', 'newRoom']) {
+    const c = setup(); match(c); const { rooms, a, b } = c;
+    rooms.action(a.id, { action: 'resign', version: rooms.view(a.id).room.version });
+    rooms.rematch(a.id, { action: 'offer', version: rooms.view(a.id).room.version });
+    rooms[leaveBy](b.id, { name: 'Bob' });
+    assert.equal(rooms.view(a.id).room.rematchOffer, null);
+    assert.equal(rooms.view(a.id).room.opponentAvailable, false);
+    assert.throws(() => rooms.rematch(a.id, { action: 'offer', version: rooms.view(a.id).room.version }), /left/);
+  }
+});
+
